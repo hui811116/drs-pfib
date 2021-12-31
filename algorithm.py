@@ -26,7 +26,7 @@ def drsPF(pxy,nz,beta,convthres,maxiter,**kwargs):
 	for idx, item in enumerate(shuffle_zx):
 		pzcx[item,idx] = 1
 	# smoothing 
-	pzcx+= 1e-2
+	pzcx+= 2e-3
 	# NOTE: nz<= nx always
 	##
 	#pzcx= rs.rand(nz,nx)
@@ -96,7 +96,16 @@ def drsIBType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 
 	#sel_idx = rs.permutation(nx)
 
-	pzcx= rs.rand(nz,nx)
+	# random initialization
+	#pzcx= rs.rand(nz,nx)
+
+	# deterministic start
+	pzcx = np.zeros((nz,nx))
+	shuffle_zx = rs.permutation(nz)
+	for idx, item in enumerate(shuffle_zx):
+		pzcx[item,idx] = 1
+	# smoothing 
+	pzcx+= 2e-3
 
 	pzcx /= np.sum(pzcx,axis=0)
 	pz = np.sum(pzcx*px,axis=1)
@@ -121,7 +130,7 @@ def drsIBType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 		dual_z = dual_drs_z+ penalty*errz
 		# solve -gamma H(Z|X) + H(Z|Y)
 		pzcy = pzcx @ pxcy
-		grad_x =  (gamma*(np.log(pzcx)+1) - (np.log(pzcy)+1)@pycx -(dual_z+penalty*errz))*px[None,:]
+		grad_x =  (gamma*(np.log(pzcx)+1) - (np.log(pzcy)+1)@pycx -(dual_z+penalty*errz)[:,None])*px[None,:]
 		mean_grad_x = grad_x-np.mean(grad_x,axis=0)
 		ss_x = gd.validStepSize(pzcx,-mean_grad_x,ss_init,ss_scale)
 		if ss_x == 0:

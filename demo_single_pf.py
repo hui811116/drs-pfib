@@ -17,6 +17,7 @@ import copy
 d_base = os.getcwd()
 
 parser = argparse.ArgumentParser()
+parser.add_argument("opt",type=str,choices=['ib','pf'],help="The objective to optimize")
 parser.add_argument("-beta",type=float,help='the PF beta',default=5.0)
 parser.add_argument('-ntime',type=int,help='run how many times per beta',default=1)
 parser.add_argument('-penalty',type=float,help='penalty coefficient',default=1024.0)
@@ -38,11 +39,14 @@ argdict = vars(args)
 
 #d_beta_range = np.geomspace(args.minbeta,args.maxbeta,num=args.numbeta)
 #data = dt.synMy()
-#data = dt.uciHeart()
-data = dt.uciHeartFail()
+data = dt.uciHeart()
+#data = dt.uciHeartFail()
 
 def runAlg(nz,beta,thres,maxiter,**kwargs):
-	algout = alg.drsPF(data['pxy'],nz,beta,thres,maxiter,**kwargs)
+	if args.opt == "pf":
+		algout = alg.drsPF(data['pxy'],nz,beta,thres,maxiter,**kwargs)
+	elif args.opt == "ib":
+		algout = alg.drsIBType1(data['pxy'],nz,beta,thres,maxiter,**kwargs)
 	return algout
 
 
@@ -52,12 +56,11 @@ sinit = copy.copy(argdict['sinit'])
 while nz >=2:
 	argdict['sinit'] = sinit
 	#for beta in d_beta_range:
-	beta= args.beta
 	#conv_cnt = 0
 	for nn in range(args.ntime):
 		#print('\rProgress: beta={:.2f}, run={:>5}/{:>5}, nz={:>3}, ss_init={:8.2e}'.format(beta,nn,args.ntime,nz,argdict['sinit']),end='',flush=True)
-		output = runAlg(nz,beta,**argdict)
-		print('{nidx:<3} run: IZX={IZX:>10.4f}, IZY={IZY:>10.4f}, niter={niter:>10}, converge:{conv:>5}'.format(**{'nidx':nn,**output}))
+		output = runAlg(nz,**argdict)
+		print('{nidx:<3} run: nz={nz:>3}, IZX={IZX:>10.4f}, IZY={IZY:>10.4f}, niter={niter:>10}, converge:{conv:>5}'.format(**{'nidx':nn,'nz':nz,**output}))
 		#conv_cnt += int(output['conv'])
 		'''
 		if output['conv']:
