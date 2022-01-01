@@ -29,7 +29,7 @@ parser.add_argument('-seed',type=int,help='Random seed for reproduction',default
 parser.add_argument('-minbeta',type=float,help='the minimum beta',default=1.0)
 parser.add_argument('-maxbeta',type=float,help='the maximum beta',default=10.0)
 parser.add_argument('-numbeta',type=float,help='beta geometric space',default=16)
-
+#parser.add_argument('-detinit',help='Start from a almost deterministic point',action='count',default=0)
 
 
 
@@ -47,26 +47,28 @@ def runAlg(nz,beta,thres,maxiter,**kwargs):
 
 
 result_dict= {}
-nz = data['ny']
+nz = data['nx']
 sinit = copy.copy(argdict['sinit'])
 while nz >=2:
 	argdict['sinit'] = sinit
-	for beta in d_beta_range:
-		conv_cnt = 0
-		for nn in range(args.ntime):
-			print('\rProgress: beta={:.2f}, run={:>5}/{:>5}, nz={:>3}, ss_init={:8.2e}'.format(beta,nn,args.ntime,nz,argdict['sinit']),end='',flush=True)
-			output = runAlg(nz,beta,**argdict)
-			#print('{nidx:<3} run: IZX={IZX:>10.4f}, IZY={IZY:>10.4f}, niter={niter:>10}, converge:{conv:>5}'.format(**{'nidx':nn,**output}))
-			conv_cnt += int(output['conv'])
-			if output['conv']:
-				izx_str = '{:.2f}'.format(output['IZX'])
-				if not result_dict.get(izx_str,False):
-					result_dict[izx_str] = 9999
-				if result_dict[izx_str] >output['IZY']:
-					result_dict[izx_str] = output['IZY']
-		status_tex = 'beta:{:.2f} complete. conv_rate:{:8.4f}, sinit:{:8.4f}'.format(beta,conv_cnt/args.ntime,argdict['sinit'])
-		print('\r{:<200}'.format(status_tex),end='\r',flush=True)
-		argdict['sinit'] *= 0.9
+	for randscheme in range(2):
+		argdict['detinit'] = randscheme
+		for beta in d_beta_range:
+			conv_cnt = 0
+			for nn in range(args.ntime):
+				print('\rProgress: beta={:.2f}, run={:>5}/{:>5}, nz={:>3}, ss_init={:8.2e}, detinit={:>3}'.format(beta,nn,args.ntime,nz,argdict['sinit'],randscheme),end='',flush=True)
+				output = runAlg(nz,beta,**argdict)
+				#print('{nidx:<3} run: IZX={IZX:>10.4f}, IZY={IZY:>10.4f}, niter={niter:>10}, converge:{conv:>5}'.format(**{'nidx':nn,**output}))
+				conv_cnt += int(output['conv'])
+				if output['conv']:
+					izx_str = '{:.1f}'.format(output['IZX'])
+					if not result_dict.get(izx_str,False):
+						result_dict[izx_str] = 9999
+					if result_dict[izx_str] >output['IZY']:
+						result_dict[izx_str] = output['IZY']
+			status_tex = 'beta:{:.2f} complete. conv_rate:{:8.4f}, sinit:{:8.4f}, detinit:{:>3}'.format(beta,conv_cnt/args.ntime,argdict['sinit'],randscheme)
+			print('\r{:<200}'.format(status_tex),end='\r',flush=True)
+			#argdict['sinit'] *= 0.9
 	nz -= 1
 print(' '*200+'\r',end='',flush=True)
 
