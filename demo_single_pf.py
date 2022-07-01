@@ -28,6 +28,7 @@ parser.add_argument('-sscale',type=float,help='Scaling of step size',default=0.2
 parser.add_argument('-maxiter',type=int,help='Maximum number of iterations',default=40000)
 parser.add_argument('-seed',type=int,help='Random seed for reproduction',default=None)
 parser.add_argument('-detinit',help='Start from a almost deterministic point',action='count',default=1)
+parser.add_argument('-record',action="store_true",default=False,help='Record the value decrease')
 #parser.add_argument('-minbeta',type=float,help='the minimum beta',default=1.0)
 #parser.add_argument('-maxbeta',type=float,help='the maximum beta',default=10.0)
 #parser.add_argument('-numbeta',type=float,help='beta geometric space',default=16)

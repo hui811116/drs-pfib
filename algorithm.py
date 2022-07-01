@@ -58,7 +58,7 @@ def drsPF(pxy,nz,beta,convthres,maxiter,**kwargs):
 		itcnt += 1
 		# solve -beta H(Z|Y)
 		grad_y = beta*(np.log(pzcy)+1)*py[None,:] + (dual_y+penalty*erry)
-		mean_grad_y = grad_y - np.mean(grad_y)
+		mean_grad_y = grad_y - np.mean(grad_y,axis=0)
 		ss_y = gd.validStepSize(pzcy,-mean_grad_y,ss_init,ss_scale)
 		if ss_y ==0:
 			break
@@ -138,6 +138,7 @@ def drsIBType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 	conv = False
 	while itcnt < maxiter:
 		errz = pz - np.sum(pzcx*px[None,:],axis=1)
+		pzcy = pzcx @ pxcy
 		# IB: (gamma-1) H(Z) -gamma H(Z|X) + H(Z|Y)
 		record_mat[itcnt % record_mat.shape[0]] = (gamma-1)*np.sum(-pz*np.log(pz))-gamma*np.sum(pzcx*px[None,:]*np.log(pzcx))\
 													+np.sum(pzcy*py[None,:]*np.log(pzcy))+np.sum(dual_z*errz)\
