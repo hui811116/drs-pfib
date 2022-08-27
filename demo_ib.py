@@ -38,9 +38,9 @@ args = parser.parse_args()
 argdict = vars(args)
 
 d_beta_range = np.geomspace(args.minbeta,args.maxbeta,num=args.numbeta)
-#data = dt.synMy()
+data = dt.synMy()
 #data = dt.uciHeart()
-data = dt.uciHeartFail()
+#data = dt.uciHeartFail()
 
 def runAlg(nz,beta,thres,maxiter,**kwargs):
 	algout = alg.drsIBType1(data['pxy'],nz,beta,thres,maxiter,**kwargs)
@@ -83,9 +83,11 @@ plt.scatter(datanpy[:,0],datanpy[:,1],marker="^",c='r')
 plt.show()
 
 # save mat
+'''
 savemat_name = 'heartfail_drsib_r_{}_c_{}_si_{:4.2e}'.format(args.relax,int(args.penalty),sinit)
 outmat_name = savemat_name.replace('.',"") + '.mat'
 save_location = os.path.join(d_base,outmat_name)
 savemat(save_location,{'relax':args.relax,'penalty':args.penalty,'sinit':args.sinit,'infoplane':datanpy,})
 
 print('simulation complete, saving results to: {}'.format(save_location))
+'''
