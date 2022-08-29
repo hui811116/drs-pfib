@@ -43,7 +43,9 @@ data = dt.synMy()
 #data = dt.uciHeartFail()
 
 def runAlg(nz,beta,thres,maxiter,**kwargs):
-	algout = alg.drsIBType1(data['pxy'],nz,beta,thres,maxiter,**kwargs)
+	#algout = alg.drsIBType1(data['pxy'],nz,beta,thres,maxiter,**kwargs)
+	#algout = alg.drsIBType1FPX(data['pxy'],nz,beta,thres,maxiter,**kwargs)
+	algout = alg.drsIBType2(data['pxy'],nz,beta,thres,maxiter,**kwargs)
 	return algout
 
 
@@ -61,7 +63,7 @@ for randscheme in range(2):
 			#print('{nidx:<3} run: IZX={IZX:>10.4f}, IZY={IZY:>10.4f}, niter={niter:>10}, converge:{conv:>5}'.format(**{'nidx':nn,**output}))
 			conv_cnt += int(output['conv'])
 			if output['conv']:
-				izx_str = '{:.1f}'.format(output['IZX'])
+				izx_str = '{:.2f}'.format(output['IZX'])
 				if not result_dict.get(izx_str,False):
 					result_dict[izx_str] = 0
 				if result_dict[izx_str] <output['IZY']:
@@ -83,11 +85,10 @@ plt.scatter(datanpy[:,0],datanpy[:,1],marker="^",c='r')
 plt.show()
 
 # save mat
-'''
-savemat_name = 'heartfail_drsib_r_{}_c_{}_si_{:4.2e}'.format(args.relax,int(args.penalty),sinit)
+
+savemat_name = 'wuiclr2020_drsib_r_{}_c_{}_si_{:4.2e}'.format(args.relax,int(args.penalty),sinit)
 outmat_name = savemat_name.replace('.',"") + '.mat'
 save_location = os.path.join(d_base,outmat_name)
 savemat(save_location,{'relax':args.relax,'penalty':args.penalty,'sinit':args.sinit,'infoplane':datanpy,})
 
 print('simulation complete, saving results to: {}'.format(save_location))
-'''
