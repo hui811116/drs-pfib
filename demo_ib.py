@@ -18,7 +18,7 @@ d_base = os.getcwd()
 
 parser = argparse.ArgumentParser()
 #parser.add_argument("-beta",type=float,help='the PF beta',default=5.0)
-parser.add_argument('-ntime',type=int,help='run how many times per beta',default=50)
+parser.add_argument('-ntime',type=int,help='run how many times per beta',default=20)
 parser.add_argument('-penalty',type=float,help='penalty coefficient',default=4.0)
 parser.add_argument('-relax',type=float,help='Relaxation parameter for DRS',default=1.00)
 parser.add_argument('-thres',type=float,help='convergence threshold',default=1e-6)
@@ -45,7 +45,8 @@ data = dt.synMy()
 def runAlg(nz,beta,thres,maxiter,**kwargs):
 	#algout = alg.drsIBType1(data['pxy'],nz,beta,thres,maxiter,**kwargs)
 	#algout = alg.drsIBType1FPX(data['pxy'],nz,beta,thres,maxiter,**kwargs)
-	algout = alg.drsIBType2(data['pxy'],nz,beta,thres,maxiter,**kwargs)
+	#algout = alg.drsIBType2(data['pxy'],nz,beta,thres,maxiter,**kwargs)
+	algout = alg.admmIBLogSpace(data['pxy'],nz,beta,thres,maxiter,**kwargs)
 	return algout
 
 
@@ -80,13 +81,18 @@ for k,v in result_dict.items():
 	dataout.append([izx_num,v])
 datanpy = np.array(dataout)
 
-plt.scatter(datanpy[:,0],datanpy[:,1],marker="^",c='r')
+mixy = ut.calcMI(data['pxy'])
+
+plt.scatter(datanpy[:,0],datanpy[:,1],marker="^",c='r',label="solution")
+plt.hlines(mixy,0,np.amax(datanpy[:,0]))
+plt.plot([0,mixy],[0,mixy])
+
 
 plt.show()
 
 # save mat
 
-savemat_name = 'wuiclr2020_drsib_r_{}_c_{}_si_{:4.2e}'.format(args.relax,int(args.penalty),sinit)
+savemat_name = 'wuiclr2020_logadmmib_r_{}_c_{}_si_{:4.2e}'.format(args.relax,int(args.penalty),sinit)
 outmat_name = savemat_name.replace('.',"") + '.mat'
 save_location = os.path.join(d_base,outmat_name)
 savemat(save_location,{'relax':args.relax,'penalty':args.penalty,'sinit':args.sinit,'infoplane':datanpy,})
