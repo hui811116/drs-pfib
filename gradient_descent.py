@@ -14,12 +14,23 @@ def validStepSize(prob,update,init_stepsize,bk_beta):
 	return step_size
 
 # now, we need armijo step-size selection or back-tracking step-size for faster convergence
-def armijoStepSize(prob,update,ss_init,ss_scale,**kwargs):
-	pass
+def armijoStepSize(prob,update,alpha,ss_beta,c1,obj_func,obj_grad,**kwargs):
+	ss = alpha
+	f_next = obj_func(prob+ss*update,**kwargs) 
+	f_now = obj_func(prob,**kwargs)
+	now_grad = obj_grad(prob,**kwargs)
+	now_grad = meanSubtractedGrad(now_grad)
+	while f_next > f_now + c1*ss*np.sum(update*now_grad):
+		if ss <= 1e-9:
+			ss=0
+			break
+		ss *= ss_beta
+		f_next = obj_func(prob+ss*update,**kwargs)
+	return ss
 
 # convenient gradient projection to probability simplex
 def meanSubtractedGrad(grad,**kwargs):
-	return grad - np.mean(grad,0)
+	return grad - np.mean(grad,axis=0)
 
 ## for privacy funnel
 # ----------------------
@@ -57,10 +68,10 @@ def ibType1PzFuncObj(px,gamma,penalty):
 		return (gamma -1) * np.sum(-pz * np.log(pz)) + np.sum(dual_z * err_z) + 0.5 * penalty * np.linalg.norm(err_z)**2
 	return genFuncObj
 def ibType1PzcxFuncObj(px,pxcy,py,gamma,penalty):
-	def genFuncObj(pz,pzcx,dual_z,**kwargs):
-		err_x = pz - np.sum(pzcx * px[None,:],axis=1)
+	def genFuncObj(pzcx,pz,dual_z,**kwargs):
+		err_z = pz - np.sum(pzcx * px[None,:],axis=1)
 		pzcy = pzcx @ pxcy
-		return -gamma * np.sum(-pzcx * px[None,:] * np.log(pzcx)) + np.sum(-pzcy * py[None,:]*np.log(pzcy)) + np.sum(dual_z*err_x)+0.5*penalty*np.linalg.norm(err_x)**2
+		return -gamma * np.sum(-pzcx * px[None,:] * np.log(pzcx)) + np.sum(-pzcy * py[None,:]*np.log(pzcy)) + np.sum(dual_z*err_z)+0.5*penalty*np.linalg.norm(err_z)**2
 	return genFuncObj
 def ibType1PzGradObj(px,gamma,penalty):
 	def genGradObj(pz,pzcx,dual_z,**kwargs):
@@ -68,9 +79,9 @@ def ibType1PzGradObj(px,gamma,penalty):
 		return -(gamma-1) * (np.log(pz)+1) +dual_z + penalty * err_z
 	return genGradObj
 
-def ibType1PzcxGradObj(px,pxcy,py,gamma,penalty):
-	def genGradObj(pz,pzcx,dual_z,**kwargs):
-		err_x = pz - np.sum(pzcx * px[None,:],axis=1)
+def ibType1PzcxGradObj(px,pxcy,py,pycx,gamma,penalty):
+	def genGradObj(pzcx,pz,dual_z,**kwargs):
+		err_z = pz - np.sum(pzcx * px[None,:],axis=1)
 		pzcy = pzcx @ pxcy
 		return (gamma * (np.log(pzcx)+1)  - (np.log(pzcy)+1) @ pycx  - (dual_z + penalty * err_z)[:,None]) * px[None,:]
 	return genGradObj

@@ -140,9 +140,11 @@ exp*/
 .DS_Store/*
 .DS_Store
 
-# MATLAB
+# DATA
 *.mat
 *.m
+*.npy
+*.pkl
 
 # figures
 *.png

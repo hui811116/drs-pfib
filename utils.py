@@ -15,3 +15,5 @@ def calcLogWeightedProj(logmp,weight):
 	ms_logmp = logmp - np.amax(logmp)
 	return -np.log(softmax(weight * ms_logmp))
 '''
+def calcEnt(pz):
+	return -np.sum(np.log(pz)*pz)

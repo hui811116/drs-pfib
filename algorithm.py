@@ -187,103 +187,6 @@ def drsPFArm(pxy,nz,beta,convthres,maxiter,**kwargs):
 		output_dict['record'] = record_mat[:itcnt]
 	return output_dict
 
-'''
-def drsIBType1FPX(pxy,nz,beta,convthres,maxiter,**kwargs):
-	penalty = kwargs['penalty']
-	alpha = kwargs['relax']
-	gamma = 1/ beta
-	ss_init = kwargs['sinit']
-	ss_scale = kwargs['sscale']
-	det_init = kwargs['detinit']
-	record_flag = kwargs['record']
-	rs = RandomState(MT19937(SeedSequence(kwargs['seed'])))
-	(nx,ny) = pxy.shape
-
-	px = np.sum(pxy,axis=1)
-	py = np.sum(pxy,axis=0)
-	pxcy = pxy / py[None,:]
-	pycx = (pxy / px[:,None]).T
-
-	pzcx = np.zeros((nz,nx))
-	# random initialization
-	if det_init ==0:
-		pzcx= rs.rand(nz,nx)
-	else:
-		# deterministic start
-		shuffle_zx = rs.permutation(nz)
-		for idx, item in enumerate(shuffle_zx):
-			pzcx[item,idx] = 1
-		shuffle_rest = rs.randint(nz,size=(nx-nz))
-		for nn in range(nx-nz):
-			pzcx[shuffle_rest[nn],nz+nn]= 1 
-		# smoothing 
-		pzcx+= 1e-3
-
-	pzcx /= np.sum(pzcx,axis=0)
-	pz = np.sum(pzcx*px,axis=1)
-
-	dual_z = np.zeros((nz))
-	itcnt =0
-	record_mat = np.zeros((1))
-	if record_flag:
-		record_mat = np.zeros((maxiter))
-	conv = False
-	while itcnt < maxiter:
-		itcnt += 1
-		errz = pz - np.sum(pzcx*px[None,:],axis=1)
-		pzcy = pzcx @ pxcy
-		# IB: (gamma-1) H(Z) -gamma H(Z|X) + H(Z|Y)
-		record_mat[itcnt % record_mat.shape[0]] = (gamma-1)*np.sum(-pz*np.log(pz))-gamma*np.sum(pzcx*px[None,:]*np.log(pzcx))\
-													+np.sum(pzcy*py[None,:]*np.log(pzcy))+np.sum(dual_z*errz)\
-													+0.5*penalty*(np.linalg.norm(errz)**2)
-		dual_drs_z = dual_z - (1-alpha)*penalty*errz
-		copy_pz = copy.deepcopy(pz)
-		ccnt = 0
-		while ccnt < 10:
-			ccnt +=1
-			errz = copy_pz - np.sum(pzcx*px[None,:],axis=1)
-			grad_z = (1-gamma) * (np.log(copy_pz)+1) + dual_drs_z + penalty * errz
-			mean_grad_z = grad_z - np.mean(grad_z)
-			ss_z = gd.validStepSize(copy_pz,-mean_grad_z,ss_init,ss_scale)
-			if ss_z == 0:
-				break
-			copy_pz = copy_pz - ss_z * mean_grad_z
-		new_pz = copy_pz
-		# solve: (gamma-1)H(Z)
-		errz = new_pz - np.sum(pzcx*px[None,:],axis=1)
-		dual_z = dual_drs_z+ penalty*errz
-		# solve -gamma H(Z|X) + H(Z|Y)
-		ccnt = 0
-		copy_pzcx = copy.deepcopy(pzcx)
-		while ccnt< 10:
-			ccnt += 1
-			err_z = new_pz - np.sum(copy_pzcx * px[None,:],axis=1)
-			pzcy = copy_pzcx@ pxcy
-			grad_x = (gamma * (np.log(copy_pzcx)+1) - (np.log(pzcy)+1)@pycx - (dual_z+penalty*err_z)[:,None])*px[None,:]
-			mean_grad_x = grad_x - np.mean(grad_x,axis=0)
-			ss_x = gd.validStepSize(copy_pzcx,-mean_grad_x,ss_init,ss_scale)
-			if ss_x == 0:
-				break
-			copy_pzcx = copy_pzcx - mean_grad_x * ss_x
-		new_pzcx = copy_pzcx	
-		errz = new_pz - np.sum(new_pzcx*px[None,:],axis=1)
-		dtvz = 0.5* np.sum(np.fabs(errz),axis=0)
-		if np.all(np.array(dtvz<convthres)):
-			conv = True
-			break
-		else:
-			pzcx = new_pzcx
-			pzcy = new_pzcx @ pxcy
-			pz = new_pz
-	mizx = ut.calcMI(pzcx*px[None,:])
-	mizy = ut.calcMI(pzcy*py[None,:])
-	output_dict = {'pzcx':pzcx,'niter':itcnt,'conv':conv,'IZX':mizx,'IZY':mizy}
-	if record_flag:
-		output_dict['record'] = record_mat[:itcnt]
-	return output_dict
-'''
-
-
 def drsIBType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 	penalty = kwargs['penalty']
 	alpha = kwargs['relax']
@@ -294,11 +197,17 @@ def drsIBType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 	record_flag = kwargs['record']
 	rs = RandomState(MT19937(SeedSequence(kwargs['seed'])))
 	(nx,ny) = pxy.shape
-
 	px = np.sum(pxy,axis=1)
 	py = np.sum(pxy,axis=0)
 	pxcy = pxy / py[None,:]
 	pycx = (pxy / px[:,None]).T
+
+	# function objects
+	fobj_pz = gd.ibType1PzFuncObj(px,gamma,penalty)
+	fobj_pzcx = gd.ibType1PzcxFuncObj(px,pxcy,py,gamma,penalty)
+	# gradient objects
+	gobj_pz = gd.ibType1PzGradObj(px,gamma,penalty)
+	gobj_pzcx = gd.ibType1PzcxGradObj(px,pxcy,py,pycx,gamma,penalty)
 
 	pzcx = np.zeros((nz,nx))
 	# random initialization
@@ -328,32 +237,42 @@ def drsIBType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 		itcnt +=1
 		errz = pz - np.sum(pzcx*px[None,:],axis=1)
 		pzcy = pzcx @ pxcy
+		# function value, used for tracking
 		# IB: (gamma-1) H(Z) -gamma H(Z|X) + H(Z|Y)
 		record_mat[itcnt % record_mat.shape[0]] = (gamma-1)*np.sum(-pz*np.log(pz))-gamma*np.sum(-pzcx*px[None,:]*np.log(pzcx))\
 													+np.sum(-pzcy*py[None,:]*np.log(pzcy))+np.sum(dual_z*errz)\
 													+0.5*penalty*(np.linalg.norm(errz)**2)
+		# drs relaxation step
 		dual_drs_z = dual_z - (1-alpha)*penalty*errz
 
 		errz = pz - np.sum(pzcx*px[None,:],axis=1)
-		grad_z = (1-gamma) * (np.log(pz)+1) + dual_drs_z + penalty * errz
+		gd_eval_dict = {"pz":pz,"pzcx":pzcx,"dual_z":dual_drs_z}
+		grad_z = gobj_pz(**gd_eval_dict)
 		mean_grad_z = grad_z - np.mean(grad_z)
 		ss_z = gd.validStepSize(pz,-mean_grad_z,ss_init,ss_scale)
 		if ss_z == 0:
 			break
-		new_pz = pz - ss_z * mean_grad_z
+		# armijo
+		arm_z = gd.armijoStepSize(pz,-mean_grad_z,ss_z,ss_scale,1e-4,fobj_pz,gobj_pz,**{"pzcx":pzcx,"dual_z":dual_drs_z})
+		if arm_z == 0:
+			arm_z = ss_z
+		new_pz = pz - arm_z * mean_grad_z
 		# solve: (gamma-1)H(Z)
 		errz = new_pz - np.sum(pzcx*px[None,:],axis=1)
 		dual_z = dual_drs_z+ penalty*errz
 		# solve -gamma H(Z|X) + H(Z|Y)
 
-		err_z = new_pz - np.sum(copy_pzcx * px[None,:],axis=1)
-		pzcy = copy_pzcx@ pxcy
-		grad_x = (gamma * (np.log(copy_pzcx)+1) - (np.log(pzcy)+1)@pycx - (dual_z+penalty*err_z)[:,None])*px[None,:]
+		#pzcy = pzcx@ pxcy
+		gd_eval_dict["pz"] = new_pz
+		grad_x = gobj_pzcx(**gd_eval_dict)
 		mean_grad_x = grad_x - np.mean(grad_x,axis=0)
-		ss_x = gd.validStepSize(copy_pzcx,-mean_grad_x,ss_init,ss_scale)
+		ss_x = gd.validStepSize(pzcx,-mean_grad_x,ss_init,ss_scale)
 		if ss_x == 0:
 			break
-		new_pzcx = pzcx - ss_x * mean_grad_x
+		arm_x = gd.armijoStepSize(pzcx,-mean_grad_x,ss_x,ss_scale,1e-4,fobj_pzcx,gobj_pzcx,**{"pz":new_pz,"dual_z":dual_z})
+		if arm_x == 0:
+			arm_x = ss_x
+		new_pzcx = pzcx - arm_x * mean_grad_x
 		errz = new_pz - np.sum(new_pzcx*px[None,:],axis=1)
 		dtvz = 0.5* np.sum(np.fabs(errz),axis=0)
 		if np.all(np.array(dtvz<convthres)):
@@ -363,6 +282,7 @@ def drsIBType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 			pzcx = new_pzcx
 			pzcy = new_pzcx @ pxcy
 			pz = new_pz
+	pzcy = pzcx @ pxcy
 	mizx = ut.calcMI(pzcx*px[None,:])
 	mizy = ut.calcMI(pzcy*py[None,:])
 	output_dict = {'pzcx':pzcx,'niter':itcnt,'conv':conv,'IZX':mizx,'IZY':mizy}
