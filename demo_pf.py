@@ -37,6 +37,7 @@ parser.add_argument('--dataset',type=str,default="syn",help="dataset to run")
 
 args = parser.parse_args()
 argdict = vars(args)
+print(argdict)
 
 d_beta_range = np.geomspace(args.minbeta,args.maxbeta,num=args.numbeta)
 #data = dt.uciHeart()
@@ -57,8 +58,8 @@ if args.method == "admm":
 	algrun = alg.drsPF
 elif args.method == "admmarm":
 	algrun = alg.drsPFArm
-#elif args.method == "admmlog":
-#	algrun = alg.pfLogSpace
+elif args.method == "logadmm":
+	algrun = alg.pfLogSpace
 else:
 	sys.exit("Undefined algorithm {:}".format(args.method))
 

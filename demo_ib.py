@@ -36,6 +36,7 @@ parser.add_argument('--dataset',type=str,help="dataset to run",default="syn")
 
 args = parser.parse_args()
 argdict = vars(args)
+print(argdict)
 
 d_beta_range = np.geomspace(args.minbeta,args.maxbeta,num=args.numbeta)
 if args.dataset == "syn":
@@ -85,7 +86,7 @@ for randscheme in range(2):
 					result_dict[izx_str] = 0
 				if result_dict[izx_str] <output['IZY']:
 					result_dict[izx_str] = output['IZY']
-		status_tex = 'beta,{:.2f},conv_rate,{:8.4f},sinit,{:8.4f},detinit,{:}'.format(beta,conv_cnt/args.ntime,argdict['sinit'],argdict['detinit'])
+		status_tex = 'beta,{:.2f},nz,{:},conv_rate,{:.4f},sinit,{:.4f},detinit,{:}'.format(beta,nz,conv_cnt/args.ntime,argdict['sinit'],argdict['detinit'])
 		#print('\r{:<200}'.format(status_tex),end='\r',flush=True)
 		print('{:}'.format(status_tex))
 		#argdict['sinit'] *= 0.9

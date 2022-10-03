@@ -153,6 +153,81 @@ def drsPFArm(pxy,nz,beta,convthres,maxiter,**kwargs):
 		output_dict['record'] = record_mat[:itcnt]
 	return output_dict
 
+def pfLogSpace(pxy,nz,beta,convthres,maxiter,**kwargs):
+	penalty = kwargs['penalty']
+	alpha = kwargs['relax']
+	#ss_init = kwargs['sinit']
+	#ss_scale = kwargs['sscale']
+	ss_fixed = kwargs['sinit']
+	det_init = kwargs['detinit']
+	record_flag = kwargs['record']
+	(nx,ny) = pxy.shape
+	(px,py,pxcy,pycx) = ut.priorInfo(pxy)
+
+	pzcx = ut.initPzcx(det_init,1e-7,nz,nx,kwargs['seed'])
+	# call the function value objects
+	# NOTE: nz<= nx always
+	pz = np.sum(pzcx*px,axis=1)
+	pzcy = pzcx @ pxcy
+	# minus log variables
+	mlog_pzcx = -np.log(pzcx)
+	#mlog_pz = -np.log(pz)
+	mlog_pzcy = -np.log(pzcy)
+
+	dual_y = np.zeros((nz,ny))
+	itcnt =0
+	record_mat = np.zeros((1))
+	if record_flag:
+		record_mat = np.zeros((maxiter))
+	itcnt = 0
+	conv_flag = False
+	while itcnt < maxiter:
+		exp_mlog_pzcx = np.exp(-mlog_pzcx)
+		exp_mlog_pzcy = np.exp(-mlog_pzcy)
+		est_pzcy = exp_mlog_pzcx@pxcy
+		err_y = mlog_pzcy + np.log(est_pzcy)
+		# 
+		tmp_pz = np.sum(exp_mlog_pzcx*px[None,:],axis=1)
+		record_mat[itcnt % record_mat.shape[0]] = -beta * np.sum(exp_mlog_pzcy*mlog_pzcy*py[None,:]) + (beta-1) * np.sum(-tmp_pz*np.log(tmp_pz))\
+												  +np.sum(exp_mlog_pzcx*px[None,:]*mlog_pzcx) + np.sum(dual_y*err_y) + 0.5 * penalty * np.linalg.norm(err_y)**2
+		itcnt +=1
+		# grad_y
+		grad_y = -beta* exp_mlog_pzcy*(1-mlog_pzcy)*py[None,:] + dual_y+ penalty * err_y
+		raw_mlog_pzcy = mlog_pzcy - ss_fixed * grad_y
+		raw_mlog_pzcy -= np.amin(raw_mlog_pzcy,axis=0)
+		exp_mlog_pzcy = np.exp(-raw_mlog_pzcy) + 1e-7 # smoothing
+		new_mlog_pzcy = -np.log(exp_mlog_pzcy/np.sum(exp_mlog_pzcy,axis=0,keepdims=True))
+		# grad_x
+		err_y = new_mlog_pzcy + np.log(est_pzcy)
+		grad_x = (exp_mlog_pzcx *px[None,:]) * ((beta-1)*(np.log(tmp_pz)[:,None]+1)+1-mlog_pzcx)\
+				 - exp_mlog_pzcx * (((dual_y + penalty * err_y)/est_pzcy)@pxcy.T)
+		raw_mlog_pzcx = mlog_pzcx - ss_fixed * grad_x
+		raw_mlog_pzcx -= np.amin(raw_mlog_pzcx,axis=0)
+		exp_mlog_pzcx = np.exp(-raw_mlog_pzcx) + 1e-7
+		new_mlog_pzcx = -np.log(exp_mlog_pzcx/np.sum(exp_mlog_pzcx,axis=0,keepdims=True))
+
+		# dual update
+		exp_mlog_pzcx = np.exp(-new_mlog_pzcx)
+		est_pzcy = exp_mlog_pzcx @ pxcy 
+		err_y = new_mlog_pzcy + np.log(est_pzcy)
+		dual_y += penalty * err_y
+		# convergence 
+		conv_y = 0.5 * np.sum(np.fabs(np.exp(-new_mlog_pzcy)-est_pzcy ),axis=0)
+		if np.all(conv_y<convthres):
+			conv_flag = True
+			break
+		else:
+			mlog_pzcx = new_mlog_pzcx
+			mlog_pzcy = new_mlog_pzcy
+	pzcx = np.exp(-mlog_pzcx)
+	pzcy = pzcx @ pxcy
+	mizx = ut.calcMI(pzcx * px[None,:])
+	mizy = ut.calcMI(pzcy * py[None,:])
+	output_dict = {"pzcx":pzcx, "niter":itcnt, "conv":conv_flag,"IZX":mizx,"IZY":mizy}
+	if record_flag:
+		output_dict["record"] = record_mat[:itcnt]
+	return output_dict
+
 def drsIBType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 	penalty = kwargs['penalty']
 	alpha = kwargs['relax']
@@ -181,7 +256,6 @@ def drsIBType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 		record_mat = np.zeros((maxiter))
 	conv = False
 	while itcnt < maxiter:
-		itcnt +=1
 		errz = pz - np.sum(pzcx*px[None,:],axis=1)
 		pzcy = pzcx @ pxcy
 		# function value, used for tracking
@@ -189,6 +263,7 @@ def drsIBType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 		record_mat[itcnt % record_mat.shape[0]] = (gamma-1)*np.sum(-pz*np.log(pz))-gamma*np.sum(-pzcx*px[None,:]*np.log(pzcx))\
 													+np.sum(-pzcy*py[None,:]*np.log(pzcy))+np.sum(dual_z*errz)\
 													+0.5*penalty*(np.linalg.norm(errz)**2)
+		itcnt+=1 
 		# drs relaxation step
 		dual_drs_z = dual_z - (1-alpha)*penalty*errz
 
@@ -266,7 +341,6 @@ def drsIBType2(pxy,nz,beta,convthres,maxiter,**kwargs):
 		record_mat = np.zeros((maxiter))
 	conv = False
 	while itcnt < maxiter:
-		itcnt += 1
 		err_z = np.sum(pzcx*px[None,:],axis=1) - pz
 		err_zy = pzcx@pxcy - pzcy
 		# loss = (gamma-1)H(Z) + H(Z|Y) + <dual_z,pzcx@px-pz> + <dual_zy,pzcx@pxcy-pzcy> + c/2|errz|^2+c/2|errzcy|^2
@@ -275,6 +349,7 @@ def drsIBType2(pxy,nz,beta,convthres,maxiter,**kwargs):
 												 -gamma * np.sum(-pzcx*px[None,:]*np.log(pzcx))\
 												 +np.sum(dual_z*err_z)+np.sum(dual_zy*err_zy)\
 												 +penalty*0.5 * (np.linalg.norm(err_z)**2+np.linalg.norm(err_zy)**2)
+		itcnt+=1
 		# loss = -gamma H(Z|X) + <dual_z,err_z> + <dual_zy, err_zy> + ....
 		grad_x = gobj_pzcx(pzcx,pz,pzcy,dual_z,dual_zy)
 		#grad_x = (gamma * (np.log(pzcx)+1) + (dual_z + penalty * err_z)[:,None]) * px[None,:]\
@@ -362,25 +437,29 @@ def admmIBLogSpaceType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 		record_mat = np.zeros((maxiter,))
 	conv_flag = False
 	while itcnt < maxiter:
-		itcnt += 1
 		# update mlogpz
 		mexp_mlog_pzcx= np.exp(-mlog_pzcx) # pz in probability space
 		mexp_mlog_pz  = np.exp(-mlog_pz)
-		err_z = mlog_pz + np.log(np.sum(mexp_mlog_pzcx*px[None,:],axis=1))
+		tmp_pzcy = mexp_mlog_pzcx@pxcy
+		est_pz = np.sum(mexp_mlog_pzcx * px[None,:],axis=1)
+		err_z = mlog_pz + np.log(est_pz)
+		record_mat[itcnt%record_mat.shape[0]]= (gamma-1)*np.sum(mexp_mlog_pz*mlog_pz) -gamma * np.sum(mexp_mlog_pzcx*px[None,:]*mlog_pzcx)\
+												+np.sum(-tmp_pzcy*py[None,:]*np.log(tmp_pzcy)) + np.sum(err_z * dual_z) + 0.5 * penalty * np.linalg.norm(err_z)**2
+		itcnt += 1
 		# gradient z
 		grad_z = (gamma-1) * mexp_mlog_pz*(1-mlog_pz) + dual_z + penalty * err_z
 		raw_mlog_pz = mlog_pz - grad_z * ss_fixed
 		# projection
 		raw_mlog_pz = raw_mlog_pz - np.amin(raw_mlog_pz)
 		mexp_mlog_pz = np.exp(-raw_mlog_pz) + 1e-7 # smoothing
-		mexp_mlog_pz/= np.sum(mexp_mlog_pz,keepdims=True)
+		mexp_mlog_pz/= np.sum(mexp_mlog_pz)
 		new_mlog_pz = -np.log(mexp_mlog_pz)
 		# dual update
-		err_z = new_mlog_pz + np.log(np.sum(mexp_mlog_pzcx * px[None,:],axis=1))
+		err_z = new_mlog_pz + np.log(est_pz)
 		dual_z += penalty * err_z
 		# gradient x
-		grad_x = -gamma * mexp_mlog_pzcx* (1-mlog_pzcx)*px[None,:] + mexp_mlog_pzcx*((1+np.log(mexp_mlog_pzcx@pxcy))@pxy.T) \
-				-((dual_z + penalty * err_z)/np.sum(mexp_mlog_pzcx*px[None,:],axis=1))[:,None] * mexp_mlog_pzcx * px[None,:]
+		grad_x = -gamma * mexp_mlog_pzcx* (1-mlog_pzcx)*px[None,:] + mexp_mlog_pzcx*((1+np.log(tmp_pzcy))@pxy.T) \
+				-((dual_z + penalty * err_z)/est_pz)[:,None] * (mexp_mlog_pzcx * px[None,:])
 		raw_mlog_pzcx = mlog_pzcx - grad_x * ss_fixed
 		# projection
 		raw_mlog_pzcx = raw_mlog_pzcx - np.amin(raw_mlog_pzcx,axis=0,keepdims=True)
@@ -390,8 +469,9 @@ def admmIBLogSpaceType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 
 		#final error
 		mexp_mlog_pzcx = np.exp(-new_mlog_pzcx)
-		err_z = new_mlog_pz + np.log(np.sum(mexp_mlog_pzcx * px[None,:],axis=1))
-		conv_z = 0.5 * np.sum(np.abs(np.exp(-new_mlog_pz) - np.sum(mexp_mlog_pzcx*px[None,:],axis=1)))
+		est_pz = np.sum(mexp_mlog_pzcx * px[None,:],axis=1)
+		err_z = new_mlog_pz + np.log(est_pz)
+		conv_z = 0.5 * np.sum(np.abs(np.exp(-new_mlog_pz) - est_pz))
 		if conv_z < convthres:
 			conv_flag = True
 			break
@@ -433,15 +513,23 @@ def admmIBLogSpaceType2(pxy,nz,beta,convthres,maxiter,**kwargs):
 		record_mat = np.zeros((maxiter))
 	conv_flag = False
 	while itcnt < maxiter:
+		mexp_mlog_pzcx = np.exp(-mlog_pzcx)
+		mexp_mlog_pz = np.exp(-mlog_pz)
+		mexp_mlog_pzcy = np.exp(-mlog_pzcy)
+		tmp_pzcy = mexp_mlog_pzcx@pxcy
+		est_pz = np.sum(mexp_mlog_pzcx * px[None,:],axis=1)
+		err_z =  -np.log(est_pz) -mlog_pz
+		err_zy=  -np.log(tmp_pzcy) -mlog_pzcy
+		record_mat[itcnt % record_mat.shape[0]] = -gamma * np.sum(mexp_mlog_pzcx*px[None,:]*mlog_pzcx)\
+												 + (gamma-1) * np.sum(mexp_mlog_pz*mlog_pz)\
+												 + np.sum(mexp_mlog_pzcy * mlog_pzcy*py[None,:])\
+												 + np.sum(err_z * dual_z )+ np.sum(err_zy * dual_zy)\
+												 + 0.5 * penalty * (np.linalg.norm(err_z)**2 + np.linalg.norm(err_zy)**2)
 		itcnt += 1
 		# error
 		# convex gradient
-		mexp_mlog_pzcx = np.exp(-mlog_pzcx)
-		tmp_pzcy = mexp_mlog_pzcx@pxcy
-		err_z =  -np.log(np.sum(mexp_mlog_pzcx*px[None,:],axis=1)) -mlog_pz
-		err_zy=  -np.log(tmp_pzcy) -mlog_pzcy
-		grad_x = -gamma * mexp_mlog_pzcx*(1-mlog_pzcx) * px[None,:] \
-				+ ((dual_z + penalty * err_z)/np.sum(mexp_mlog_pzcx*px[None,:],axis=1,keepdims=True))[:,None]* mexp_mlog_pzcx*px[None,:]\
+		grad_x = -gamma * (mexp_mlog_pzcx*(1-mlog_pzcx) * px[None,:]) \
+				+ ((dual_z + penalty * err_z)/est_pz)[:,None]*(mexp_mlog_pzcx*px[None,:])\
 				+ mexp_mlog_pzcx * ( (dual_zy + penalty * err_zy)/tmp_pzcy ) @ pxcy.T
 		raw_mlog_pzcx = mlog_pzcx - grad_x * ss_fixed
 		# projection
