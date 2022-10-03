@@ -17,7 +17,7 @@ import copy
 d_base = os.getcwd()
 
 parser = argparse.ArgumentParser()
-parser.add_argument('method',choices=['admm1','admm2','logadmm'])
+parser.add_argument('method',choices=['admm1','admm2','logadmm1','logadmm2'])
 #parser.add_argument("--beta",type=float,help='the PF beta',default=5.0)
 parser.add_argument('--ntime',type=int,help='run how many times per beta',default=20)
 parser.add_argument('--penalty',type=float,help='penalty coefficient',default=4.0)
@@ -25,7 +25,7 @@ parser.add_argument('--relax',type=float,help='Relaxation parameter for DRS',def
 parser.add_argument('--thres',type=float,help='convergence threshold',default=1e-6)
 parser.add_argument('--sinit',type=float,help='initial step size',default=1e-2)
 parser.add_argument('--sscale',type=float,help='Scaling of step size',default=0.25)
-parser.add_argument('--maxiter',type=int,help='Maximum number of iterations',default=10000)
+parser.add_argument('--maxiter',type=int,help='Maximum number of iterations',default=20000)
 parser.add_argument('--seed',type=int,help='Random seed for reproduction',default=None)
 parser.add_argument('--minbeta',type=float,help='the minimum beta',default=2.0)
 parser.add_argument('--maxbeta',type=float,help='the maximum beta',default=10.0)
@@ -53,8 +53,10 @@ if args.method == "admm1":
 	algrun = alg.drsIBType1
 elif args.method == "admm2":
 	algrun = alg.drsIBType2
-elif args.method == "logadmm":
-	algrun = alg.admmIBLogSpace
+elif args.method == "logadmm1":
+	algrun = alg.admmIBLogSpaceType1
+elif args.method == "logadmm2":
+	algrun = alg.admmIBLogSpaceType2
 else:
 	sys.exit("undefined method {:}".format(args.method))
 
@@ -83,9 +85,9 @@ for randscheme in range(2):
 					result_dict[izx_str] = 0
 				if result_dict[izx_str] <output['IZY']:
 					result_dict[izx_str] = output['IZY']
-		status_tex = 'beta,{:.2f},conv_rate,{:8.4f},sinit,{:8.4f},detinit,{:>3}'.format(beta,conv_cnt/args.ntime,argdict['sinit'],argdict['detinit'])
+		status_tex = 'beta,{:.2f},conv_rate,{:8.4f},sinit,{:8.4f},detinit,{:}'.format(beta,conv_cnt/args.ntime,argdict['sinit'],argdict['detinit'])
 		#print('\r{:<200}'.format(status_tex),end='\r',flush=True)
-		print('{:<200}'.format(status_tex))
+		print('{:}'.format(status_tex))
 		#argdict['sinit'] *= 0.9
 #print(' '*200+'\r',end='',flush=True)
 
@@ -98,20 +100,14 @@ datanpy = np.array(dataout)
 
 mixy = ut.calcMI(data['pxy'])
 
-plt.scatter(datanpy[:,0],datanpy[:,1],marker="^",c='r',label="solution")
-plt.hlines(mixy,0,np.amax(datanpy[:,0]),linestyle=":")
-plt.plot([0,mixy],[0,mixy],linestyle="-.")
-
-plt.show()
-
 # save mat
-savemat_name = '{:}_{:}_r{:}_c{:}_si{:4.2e}'.format(args.dataset,args.method,args.relax,int(args.penalty),sinit)
+savemat_name = 'ib_{:}_{:}_r{:}_c{:}_si{:4.2e}'.format(args.dataset,args.method,args.relax,int(args.penalty),sinit)
 outmat_name = savemat_name.replace('.',"")
 repeat_cnt = 0
 save_location = os.path.join(d_base,outmat_name+'.mat')
 while os.path.isfile(save_location):
 	repeat_cnt+=1
-	savemat_name = '{:}_{:}_r{:}_c{:}_si{:4.2e}_{:}'.format(args.dataset,args.method,args.relax,int(args.penalty),sinit,repeat_cnt)
+	savemat_name = 'ib_{:}_{:}_r{:}_c{:}_si{:4.2e}_{:}'.format(args.dataset,args.method,args.relax,int(args.penalty),sinit,repeat_cnt)
 	outmat_name = savemat_name.replace('.',"")
 	save_location = os.path.join(d_base,outmat_name+'.mat')
 savemat(save_location,{'relax':args.relax,'penalty':args.penalty,'sinit':args.sinit,'infoplane':datanpy,})
@@ -122,3 +118,11 @@ details_savepath = os.path.join(d_base,outmat_name+".npy")
 with open(details_savepath,"wb") as fid:
 	np.save(fid,result_array)
 print("details saved to {:}".format(details_savepath))
+
+# plotting the ib curve
+plt.scatter(datanpy[:,0],datanpy[:,1],marker="^",c='r',label="solution")
+plt.hlines(mixy,0,np.amax(datanpy[:,0]),linestyle=":")
+plt.plot([0,mixy],[0,mixy],linestyle="-.")
+plt.xlabel(r"$I(Z;X)$")
+plt.ylabel(r"$I(Z;Y)$")
+plt.show()
