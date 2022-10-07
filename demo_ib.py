@@ -62,6 +62,7 @@ else:
 	sys.exit("undefined method {:}".format(args.method))
 
 result_dict= {}
+details_dict = {}
 # result_array
 result_array = np.zeros((args.numbeta * args.ntime*2,7))  # beta, niter, conv, izx, izy, entz, inittype
 res_cnt = 0
@@ -84,8 +85,13 @@ for randscheme in range(2):
 				izx_str = '{:.2f}'.format(output['IZX'])
 				if not result_dict.get(izx_str,False):
 					result_dict[izx_str] = 0
+					details_dict[izx_str] = {}
 				if result_dict[izx_str] <output['IZY']:
 					result_dict[izx_str] = output['IZY']
+					details_dict[izx_str]['beta'] = beta
+					details_dict[izx_str]['randinit'] = randscheme
+					details_dict[izx_str]['nz'] = nz
+					details_dict[izx_str]['nrun'] = nn
 		status_tex = 'beta,{:.2f},nz,{:},conv_rate,{:.4f},sinit,{:.4f},detinit,{:}'.format(beta,nz,conv_cnt/args.ntime,argdict['sinit'],argdict['detinit'])
 		#print('\r{:<200}'.format(status_tex),end='\r',flush=True)
 		print('{:}'.format(status_tex))
@@ -127,3 +133,5 @@ plt.plot([0,mixy],[0,mixy],linestyle="-.")
 plt.xlabel(r"$I(Z;X)$")
 plt.ylabel(r"$I(Z;Y)$")
 plt.show()
+
+print(details_dict)

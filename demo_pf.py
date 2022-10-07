@@ -64,6 +64,7 @@ else:
 	sys.exit("Undefined algorithm {:}".format(args.method))
 
 result_dict= {}
+details_dict = {}
 nz = data['nx']
 res_array = np.zeros((args.numbeta*args.ntime*(nz-1)*2,8))   # beta, nz,conv,niter,IZX, IZY, entz,inittype
 rcnt =0 
@@ -86,8 +87,13 @@ while nz >=2:
 					izx_str = '{:.2f}'.format(output['IZX']) # FIXME: precision is designed here
 					if not result_dict.get(izx_str,False):
 						result_dict[izx_str] = np.Inf
+						details_dict[izx_str] = {}
 					if result_dict[izx_str] >output['IZY']:
 						result_dict[izx_str] = output['IZY']
+						details_dict[izx_str]['nz'] = nz
+						details_dict[izx_str]['randinit'] = randscheme
+						details_dict[izx_str]['beta'] = beta
+						details_dict[izx_str]['nrun'] = nn 
 			status_tex = 'beta,{:.2f},nz,{:},conv_rate,{:.6f},sinit:{:.4f},detinit:{:}'.format(beta,nz,conv_cnt/args.ntime,argdict['sinit'],randscheme)
 			print("{:}".format(status_tex))
 			#argdict['sinit'] *= 0.9
@@ -129,3 +135,5 @@ plt.plot([0,mixy],[0,mixy],linestyle="-.")
 plt.xlabel(r"$I(Z;X)$")
 plt.ylabel(r"$I(Z;Y)$")
 plt.show()
+# for debugging
+print(details_dict)

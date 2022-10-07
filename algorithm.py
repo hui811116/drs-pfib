@@ -530,7 +530,7 @@ def admmIBLogSpaceType2(pxy,nz,beta,convthres,maxiter,**kwargs):
 		# convex gradient
 		grad_x = -gamma * (mexp_mlog_pzcx*(1-mlog_pzcx) * px[None,:]) \
 				+ ((dual_z + penalty * err_z)/est_pz)[:,None]*(mexp_mlog_pzcx*px[None,:])\
-				+ mexp_mlog_pzcx * ( (dual_zy + penalty * err_zy)/tmp_pzcy ) @ pxcy.T
+				+ mexp_mlog_pzcx * ( (dual_zy + penalty * err_zy)/tmp_pzcy  @ pxcy.T)
 		raw_mlog_pzcx = mlog_pzcx - grad_x * ss_fixed
 		# projection
 		raw_mlog_pzcx -= np.amin(raw_mlog_pzcx,axis=0,keepdims=True)
