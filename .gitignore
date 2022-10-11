@@ -149,3 +149,10 @@ exp*/
 # figures
 *.png
 *.eps
+
+# tar
+*.tar.gz
+
+# logs
+*.out
+*.logs

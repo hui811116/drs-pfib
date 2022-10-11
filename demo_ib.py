@@ -17,8 +17,7 @@ import copy
 d_base = os.getcwd()
 
 parser = argparse.ArgumentParser()
-parser.add_argument('method',choices=['admm1','admm2','logadmm1','logadmm2'])
-#parser.add_argument("--beta",type=float,help='the PF beta',default=5.0)
+parser.add_argument('method',choices=alg.supportedIBAlg())
 parser.add_argument('--ntime',type=int,help='run how many times per beta',default=20)
 parser.add_argument('--penalty',type=float,help='penalty coefficient',default=4.0)
 parser.add_argument('--relax',type=float,help='Relaxation parameter for DRS',default=1.00)
@@ -39,64 +38,52 @@ argdict = vars(args)
 print(argdict)
 
 d_beta_range = np.geomspace(args.minbeta,args.maxbeta,num=args.numbeta)
-if args.dataset == "syn":
-	data = dt.synMy()
-elif args.dataset == "heartfail":
-	data = dt.uciHeartFail()
-else:
-	sys.exit("undefined dataset {:}".format(args.dataset))
+data = dt.getDataset(args.dataset)
 #data = dt.uciHeart()
 #data = dt.uciHeartFail()
 
 px = np.sum(data['pxy'],axis=1)
 
-if args.method == "admm1":
-	algrun = alg.drsIBType1
-elif args.method == "admm2":
-	algrun = alg.drsIBType2
-elif args.method == "logadmm1":
-	algrun = alg.admmIBLogSpaceType1
-elif args.method == "logadmm2":
-	algrun = alg.admmIBLogSpaceType2
-else:
-	sys.exit("undefined method {:}".format(args.method))
+algrun = alg.getIBAlgorithm(args.method)
 
 result_dict= {}
 details_dict = {}
 # result_array
-result_array = np.zeros((args.numbeta * args.ntime*2,7))  # beta, niter, conv, izx, izy, entz, inittype
+nz = data['nx'] # accounts for theoretic cardinality bound
+result_array = np.zeros((args.numbeta * args.ntime*2*(nz+1),7))  # beta, niter, conv, izx, izy, entz, inittype
 res_cnt = 0
-nz = data['nx']
+#nz = data['nx']
 sinit = copy.copy(argdict['sinit'])
-for randscheme in range(2):
-	argdict['detinit'] = randscheme
-	argdict['sinit'] = sinit
-	for beta in d_beta_range:
-		conv_cnt = 0
-		for nn in range(args.ntime):
-			#print('\rProgress: beta={:.2f}, run={:>5}/{:>5}, nz={:>3}, ss_init={:8.2e}, detinit={:>3}'.format(beta,nn,args.ntime,nz,argdict['sinit'],argdict['detinit']),end='',flush=True)
-			runtime_dict = {"convthres":args.thres,**argdict}
-			output = algrun(**{"pxy":data["pxy"],"nz":nz,"beta":beta,**runtime_dict})
-			entz = ut.calcEnt(output['pzcx']@px)
-			result_array[res_cnt,:] = np.array([beta,output['niter'],int(output['conv']),output["IZX"],output["IZY"],entz,randscheme])
-			res_cnt += 1
-			conv_cnt += int(output['conv'])
-			if output['conv']:
-				izx_str = '{:.2f}'.format(output['IZX'])
-				if not result_dict.get(izx_str,False):
-					result_dict[izx_str] = 0
-					details_dict[izx_str] = {}
-				if result_dict[izx_str] <output['IZY']:
-					result_dict[izx_str] = output['IZY']
-					details_dict[izx_str]['beta'] = beta
-					details_dict[izx_str]['randinit'] = randscheme
-					details_dict[izx_str]['nz'] = nz
-					details_dict[izx_str]['nrun'] = nn
-		status_tex = 'beta,{:.2f},nz,{:},conv_rate,{:.4f},sinit,{:.4f},detinit,{:}'.format(beta,nz,conv_cnt/args.ntime,argdict['sinit'],argdict['detinit'])
-		#print('\r{:<200}'.format(status_tex),end='\r',flush=True)
-		print('{:}'.format(status_tex))
-		#argdict['sinit'] *= 0.9
-#print(' '*200+'\r',end='',flush=True)
+for run_nz in range(2,nz+2):  # should be upto |X|+1, by theorectic cardinality bound
+	for randscheme in range(2):
+		argdict['detinit'] = randscheme
+		argdict['sinit'] = sinit
+		for beta in d_beta_range:
+			conv_cnt = 0
+			for nn in range(args.ntime):
+				#print('\rProgress: beta={:.2f}, run={:>5}/{:>5}, nz={:>3}, ss_init={:8.2e}, detinit={:>3}'.format(beta,nn,args.ntime,nz,argdict['sinit'],argdict['detinit']),end='',flush=True)
+				runtime_dict = {"convthres":args.thres,**argdict}
+				output = algrun(**{"pxy":data["pxy"],"nz":run_nz,"beta":beta,**runtime_dict})
+				entz = ut.calcEnt(output['pzcx']@px)
+				result_array[res_cnt,:] = np.array([beta,output['niter'],int(output['conv']),output["IZX"],output["IZY"],entz,randscheme])
+				res_cnt += 1
+				conv_cnt += int(output['conv'])
+				if output['conv']:
+					izx_str = '{:.2f}'.format(output['IZX'])
+					if not result_dict.get(izx_str,False):
+						result_dict[izx_str] = 0
+						details_dict[izx_str] = {}
+					if result_dict[izx_str] <output['IZY']:
+						result_dict[izx_str] = output['IZY']
+						details_dict[izx_str]['beta'] = beta
+						details_dict[izx_str]['randinit'] = randscheme
+						details_dict[izx_str]['nz'] = nz
+						details_dict[izx_str]['nrun'] = nn
+			status_tex = 'beta,{:.2f},nz,{:},conv_rate,{:.4f},sinit,{:.4f},detinit,{:},ibc_item,{:}'.format(beta,run_nz,conv_cnt/args.ntime,argdict['sinit'],argdict['detinit'],len(details_dict))
+			#print('\r{:<200}'.format(status_tex),end='\r',flush=True)
+			print('{:}'.format(status_tex))
+			#argdict['sinit'] *= 0.9
+	#print(' '*200+'\r',end='',flush=True)
 
 
 dataout = []
@@ -121,7 +108,7 @@ savemat(save_location,{'relax':args.relax,'penalty':args.penalty,'sinit':args.si
 
 print('simulation complete, saving figure results to: {:}'.format(save_location))
 # save details
-details_savepath = os.path.join(d_base,outmat_name+".npy")
+details_savepath = os.path.join(d_base,outmat_name+".pkl")
 with open(details_savepath,"wb") as fid:
 	np.save(fid,result_array)
 print("details saved to {:}".format(details_savepath))
@@ -132,6 +119,7 @@ plt.hlines(mixy,0,np.amax(datanpy[:,0]),linestyle=":")
 plt.plot([0,mixy],[0,mixy],linestyle="-.")
 plt.xlabel(r"$I(Z;X)$")
 plt.ylabel(r"$I(Z;Y)$")
-plt.show()
+#plt.show()
+plt.savefig(os.path.join(d_base,outmat_name+".png"))
 
-print(details_dict)
+#print(details_dict)

@@ -23,14 +23,23 @@ def initPzcx(use_deterministic=0,smooth_val=1e-4,nz=None,nx=None,seed=None):
 	rs = np.random.default_rng(seed)
 	pzcx = np.zeros((nz,nx))
 	if use_deterministic == 1:
-		shuffle_zx = rs.permutation(nz)
-		for idx, item in enumerate(shuffle_zx):
-			pzcx[item,idx] = 1
-		shuffle_rest = rs.integers(nz,size=(nx-nz))
-		for nn in range(nx-nz):
-			pzcx[shuffle_rest[nn],nz+nn]= 1 
-		# smoothing 
-		pzcx+= 1e-4
+		if nz<= nx:
+			shuffle_zx = rs.permutation(nz)
+			for idx, item in enumerate(shuffle_zx):
+				pzcx[item,idx] = 1
+			shuffle_rest = rs.integers(nz,size=(nx-nz))
+			for nn in range(nx-nz):
+				pzcx[shuffle_rest[nn],nz+nn]= 1 
+			# smoothing 
+			pzcx+= smooth_val
+		elif nz-nx==1:
+			tmp_pxx = np.eye(nx)
+			rng_last = rs.permutation(nx)
+			last_row = (rng_last==np.arange(nx)).astype("float32")
+			pzcx = np.concatenate((tmp_pxx,last_row[None,:]),axis=0)
+			pzcx += smooth_val
+		else:
+			sys.exit("nz is invalid, either >=2 or <= |X|+1")
 	else:
 		pzcx= rs.random((nz,nx))
 	return pzcx / np.sum(pzcx,axis=0) # normalization
