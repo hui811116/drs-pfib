@@ -12,7 +12,7 @@ import algorithm as alg
 import dataset as dt
 import utils as ut
 import copy
-
+import datetime
 
 d_base = os.getcwd()
 
@@ -32,6 +32,7 @@ parser.add_argument('--numbeta',type=int,help='beta geometric space',default=20)
 #parser.add_argument('--detinit',help='Start from a almost deterministic point',action='count',default=0)
 parser.add_argument('--record',action="store_true",default=False,help='Record the value decrease')
 parser.add_argument('--dataset',type=str,help="dataset to run",default="syn")
+parser.add_argument('--save_dir',type=str,default=None,help="output folder")
 
 args = parser.parse_args()
 argdict = vars(args)
@@ -94,21 +95,29 @@ datanpy = np.array(dataout)
 
 mixy = ut.calcMI(data['pxy'])
 
+# saving the results
+tnow = datetime.datetime.now()
+if not args.save_dir:
+	savebase = "ib_{:}_{:}_results_{:04}{:02}{:02}".format(args.dataset,args.method,tnow.year,tnow.month,tnow.day)
+else:
+	savebase = args.save_dir
+d_save_dir = os.path.join(d_base,savebase)
+os.makedirs(d_save_dir,exist_ok=True)
 # save mat
 savemat_name = 'ib_{:}_{:}_r{:}_c{:}_si{:4.2e}'.format(args.dataset,args.method,args.relax,int(args.penalty),sinit)
 outmat_name = savemat_name.replace('.',"")
 repeat_cnt = 0
-save_location = os.path.join(d_base,outmat_name+'.mat')
+save_location = os.path.join(d_save_dir,outmat_name+'.mat')
 while os.path.isfile(save_location):
 	repeat_cnt+=1
 	savemat_name = 'ib_{:}_{:}_r{:}_c{:}_si{:4.2e}_{:}'.format(args.dataset,args.method,args.relax,int(args.penalty),sinit,repeat_cnt)
 	outmat_name = savemat_name.replace('.',"")
-	save_location = os.path.join(d_base,outmat_name+'.mat')
+	save_location = os.path.join(d_save_dir,outmat_name+'.mat')
 savemat(save_location,{'relax':args.relax,'penalty':args.penalty,'sinit':args.sinit,'infoplane':datanpy,})
 
 print('simulation complete, saving figure results to: {:}'.format(save_location))
 # save details
-details_savepath = os.path.join(d_base,outmat_name+".pkl")
+details_savepath = os.path.join(d_save_dir,outmat_name+".pkl")
 with open(details_savepath,"wb") as fid:
 	np.save(fid,result_array)
 print("details saved to {:}".format(details_savepath))
@@ -120,6 +129,6 @@ plt.plot([0,mixy],[0,mixy],linestyle="-.")
 plt.xlabel(r"$I(Z;X)$")
 plt.ylabel(r"$I(Z;Y)$")
 #plt.show()
-plt.savefig(os.path.join(d_base,outmat_name+".png"))
+plt.savefig(os.path.join(d_save_dir,outmat_name+".png"))
 
 #print(details_dict)

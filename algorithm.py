@@ -326,7 +326,7 @@ def pfLogSpace(pxy,nz,beta,convthres,maxiter,**kwargs):
 		new_mlog_pzcy = -np.log(exp_mlog_pzcy/np.sum(exp_mlog_pzcy,axis=0,keepdims=True))
 		# grad_x
 		err_y = new_mlog_pzcy - est_mlog_pzcy
-		dual_drs_y= dual_y -(1-relax)* penalty*err_y
+		dual_drs_y= dual_y -(1-alpha)* penalty*err_y
 
 		grad_x = (exp_mlog_pzcx *px[None,:]) * ((beta-1)*(np.log(tmp_pz)[:,None]+1)+1-mlog_pzcx)\
 				 - exp_mlog_pzcx * (((dual_drs_y + penalty * err_y)/est_pzcy)@pxcy.T)
