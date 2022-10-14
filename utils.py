@@ -18,6 +18,18 @@ def calcLogWeightedProj(logmp,weight):
 def calcEnt(pz):
 	return -np.sum(np.log(pz)*pz)
 
+def getInitWays():
+	return ["both","det","rnd"]
+
+def getInitRange(init_scheme):
+	if init_scheme=="both":
+		return [0,1]
+	elif init_scheme=="det":
+		return [1]
+	elif init_scheme == "rnd":
+		return [0]
+	else:
+		sys.exit("undefined initialization scheme")
 
 def initPzcx(use_deterministic=0,smooth_val=1e-4,nz=None,nx=None,seed=None):
 	rs = np.random.default_rng(seed)
@@ -42,7 +54,7 @@ def initPzcx(use_deterministic=0,smooth_val=1e-4,nz=None,nx=None,seed=None):
 			sys.exit("nz is invalid, either >=2 or <= |X|+1")
 	else:
 		pzcx= rs.random((nz,nx))
-	return pzcx / np.sum(pzcx,axis=0) # normalization
+	return pzcx / np.sum(pzcx,axis=0,keepdims=True) # normalization
 
 def priorInfo(pxy):
 	px = np.sum(pxy,axis=1)

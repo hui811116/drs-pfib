@@ -19,13 +19,13 @@ d_base = os.getcwd()
 parser = argparse.ArgumentParser()
 #parser.add_argument("-beta",type=float,help='the PF beta',default=5.0)
 parser.add_argument("method",choices=alg.supportedPfAlg())
-parser.add_argument('--ntime',type=int,help='run how many times per beta',default=20)
-parser.add_argument('--penalty',type=float,help='penalty coefficient',default=1024.0)
+parser.add_argument('--ntime',type=int,help='run how many times per beta',default=10)
+parser.add_argument('--penalty',type=float,help='penalty coefficient',default=64.0)
 parser.add_argument('--relax',type=float,help='Relaxation parameter for DRS',default=1.0)
 parser.add_argument('--thres',type=float,help='convergence threshold',default=1e-6)
 parser.add_argument('--sinit',type=float,help='initial step size',default=1e-3)
 parser.add_argument('--sscale',type=float,help='Scaling of step size',default=0.25)
-parser.add_argument('--maxiter',type=int,help='Maximum number of iterations',default=40000)
+parser.add_argument('--maxiter',type=int,help='Maximum number of iterations',default=5000)
 parser.add_argument('--seed',type=int,help='Random seed for reproduction',default=None)
 parser.add_argument('--minbeta',type=float,help='the minimum beta',default=1.0)
 parser.add_argument('--maxbeta',type=float,help='the maximum beta',default=20.0)
@@ -34,7 +34,7 @@ parser.add_argument('--numbeta',type=int,help='beta geometric space',default=20)
 parser.add_argument('--record',action="store_true",default=False,help='Record the value decrease')
 parser.add_argument('--dataset',type=str,default="syn",help="dataset to run")
 parser.add_argument('--save_dir',type=str,default=None,help="output folder")
-
+parser.add_argument('--init',choices=['both','det','rnd'],default="both")
 
 args = parser.parse_args()
 argdict = vars(args)
@@ -56,9 +56,10 @@ nz = data['nx'] + 1 # by theory condinality bound
 res_array = np.zeros((args.numbeta*args.ntime*(nz-1)*2,8))   # beta, nz,conv,niter,IZX, IZY, entz,inittype
 rcnt =0 
 sinit = copy.copy(argdict['sinit'])
+init_scheme_range = ut.getInitRange(args.init)
 while nz >=2:
 	argdict['sinit'] = sinit
-	for randscheme in range(2):
+	for randscheme in init_scheme_range:
 		argdict['detinit'] = randscheme
 		for beta in d_beta_range:
 			conv_cnt = 0
@@ -72,7 +73,7 @@ while nz >=2:
 				conv_cnt += int(output['conv'])
 				if output['conv']:
 					izx_str = '{:.2f}'.format(output['IZX']) # FIXME: precision is designed here
-					if not result_dict.get(izx_str,False):
+					if not izx_str in details_dict.keys():
 						result_dict[izx_str] = np.Inf
 						details_dict[izx_str] = {}
 					if result_dict[izx_str] >output['IZY']:
@@ -83,7 +84,6 @@ while nz >=2:
 						details_dict[izx_str]['nrun'] = nn 
 			status_tex = 'beta,{:.2f},nz,{:},conv_rate,{:.6f},sinit,{:.4f},detinit,{:},ifc_items,{:}'.format(beta,nz,conv_cnt/args.ntime,argdict['sinit'],randscheme,len(details_dict))
 			print("{:}".format(status_tex))
-			#argdict['sinit'] *= 0.9
 	nz -= 1
 
 dataout = []

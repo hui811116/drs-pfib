@@ -32,33 +32,6 @@ def armijoStepSize(prob,update,alpha,ss_beta,c1,obj_func,obj_grad,**kwargs):
 def meanSubtractedGrad(grad,**kwargs):
 	return grad - np.mean(grad,axis=0)
 
-## for privacy funnel
-# ----------------------
-def pfPzcyFuncObj(py,pxcy,beta,penalty):
-	def genFuncObj(pzcy,pzcx,dual_y):
-		err_y = pzcy - pzcx @ pxcy
-		return beta * np.sum(pzcy * py[None,:] * np.log(pzcy)) + np.sum(dual_y * err_y) + 0.5 * penalty * np.linalg.norm(err_y)**2
-	return genFuncObj
-
-def pfPzcyGradObj(py,pxcy,beta,penalty):
-	def genGradObj(pzcy,pzcx,dual_y):
-		err_y = pzcy - pzcx @ pxcy
-		return beta * (np.log(pzcy)+1) * py[None,:] + (dual_y + penalty * err_y)
-
-# consists of H(Z) and H(Z|X)
-def pfPzcxFuncObj(px,pxcy,beta,penalty):
-	def genFuncObj(pzcx,pzcy,dual_y):
-		tmp_pz = np.sum(pzcx * px[None,:],1)
-		err_y = pzcy - pzcx @ pxcy
-		return -(beta-1)*np.sum(tmp_pz * np.log(tmp_pz)) - np.sum(pzcx * px[None,:] * np.log(pzcx)) + np.sum(dual_y * err_y) + 0.5 * penalty * np.linalg.norm(err_y)**2
-	return genFuncObj
-def pfPzcxGradObj(px,pxcy,beta,penalty):
-	def genGradObj(pzcx,pzcy,dual_y):
-		tmp_pz = np.sum(pzcx * px[None,:],1)
-		err_y = pzcy - pzcx @ pxcy
-		return -(beta-1) * (np.log(pz)+1)[:,None]* px[None,:] - (np.log(pzcx)+1)*px[None,:]-(dual+penalty*err_y) @ pxcy.T
-	return genGradObj
-# ------------------------
 
 ## for ADMM-IB type I
 # ----------------------------------
@@ -145,34 +118,38 @@ def ibType2PzGradObj(px,gamma,penalty):
 def ibType2PzcyGradObj(py,pxcy,penalty):
 	def genGradObj(pzcy,pzcx,dual_zcy,**kwargs):
 		err_y = pzcx @ pxcy - pzcy
-		#return -(np.log(pzcy)+1) * py[None,:] -dual_zcy - penalty * err_y
 		return -(np.log(pzcy)+1) * py[None,:] -dual_zcy - penalty * err_y
 	return genGradObj
 # -------------------------
 
 # privacy funnel
+
 def pfPzcxFuncObj(px,pxcy,beta,penalty):
 	def genFuncObj(pzcx,pzcy,dual_y,**kwargs):
 		err_y = pzcy - pzcx @ pxcy
 		pz = np.sum(pzcx * px[None,:],axis=1)
-		return (beta-1) * np.sum(-pz * np.log(pz)) + np.sum(-pzcx*px[None,:]*np.log(pzcx)) + np.sum(dual_y*err_y) + 0.5 * penalty*np.linalg.norm(err_y)**2
+		#return (beta-1) * np.sum(-pz * np.log(pz)) + np.sum(-pzcx*px[None,:]*np.log(pzcx)) + np.sum(dual_y*err_y) + 0.5 * penalty*np.linalg.norm(err_y)**2
+		return (1-1/beta) * np.sum(-pz * np.log(pz)) + (1/beta)*np.sum(-pzcx*px[None,:]*np.log(pzcx)) + np.sum(dual_y*err_y) + 0.5 * penalty*np.linalg.norm(err_y)**2
 	return genFuncObj
 
 def pfPzcyFuncObj(py,pxcy,beta,penalty):
 	def genFuncObj(pzcy,pzcx,dual_y,**kwargs):
 		err_y = pzcy - pzcx @ pxcy
-		return -beta * np.sum(-pzcy * py[None,:] * np.log(pzcy)) + np.sum(dual_y * err_y) + 0.5 * penalty * np.linalg.norm(err_y)**2
+		#return -beta * np.sum(-pzcy * py[None,:] * np.log(pzcy)) + np.sum(dual_y * err_y) + 0.5 * penalty * np.linalg.norm(err_y)**2
+		return -np.sum(-pzcy * py[None,:] * np.log(pzcy)) + np.sum(dual_y * err_y) + 0.5 * penalty * np.linalg.norm(err_y)**2
 	return genFuncObj
 
 def pfPzcxGradObj(px,pxcy,beta,penalty):
 	def genGradObj(pzcx,pzcy,dual_y,**kwargs):
 		err_y = pzcy - pzcx @ pxcy
 		pz = np.sum(pzcx* px[None,:],axis=1) 
-		return ((1-beta)*(np.log(pz)+1)[:,None] -(np.log(pzcx)+1))*px[None,:] - (dual_y+penalty*err_y) @ pxcy.T
+		#return (np.repeat((1-beta)*(np.log(pz)+1)[:,None],repeats=len(px),axis=1) -(np.log(pzcx)+1))*px[None,:] - (dual_y+penalty*err_y) @ pxcy.T
+		return (np.repeat((1/beta-1)*(np.log(pz)+1)[:,None],repeats=len(px),axis=1) -(1/beta)*(np.log(pzcx)+1))*px[None,:] - (dual_y+penalty*err_y) @ pxcy.T
 	return genGradObj
 
 def pfPzcyGradObj(py,pxcy,beta,penalty):
 	def genGradObj(pzcy,pzcx,dual_y,**kwargs):
 		err_y = pzcy - pzcx @ pxcy
-		return beta * (np.log(pzcy)+1) * py[None,:] + dual_y + penalty * err_y
+		#return beta * (np.log(pzcy)+1) * py[None,:] + dual_y + penalty * err_y
+		return (np.log(pzcy)+1) * py[None,:] + dual_y + penalty * err_y
 	return genGradObj

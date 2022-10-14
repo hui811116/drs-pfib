@@ -19,10 +19,10 @@ parser.add_argument('--sscale',type=float,help='Scaling of step size',default=0.
 parser.add_argument("--nrun",type=int,help="number of iteration for a fixed beta",default=10)
 parser.add_argument('--maxiter',type=int,help='Maximum number of iterations',default=20000)
 parser.add_argument('--seed',type=int,help='Random seed for reproduction',default=None)
-parser.add_argument('--minbeta',type=float,help='the minimum beta',default=0.1)
-parser.add_argument('--maxbeta',type=float,help='the maximum beta',default=20.0)
-parser.add_argument('--numbeta',type=int,help='beta geometric space',default=20)
-parser.add_argument('--detinit',help='Start from a almost deterministic point',action='count',default=0)
+parser.add_argument('--minbeta',type=float,help='the minimum beta',default=1.0)
+parser.add_argument('--maxbeta',type=float,help='the maximum beta',default=10.0)
+parser.add_argument('--numbeta',type=int,help='beta geometric space',default=16)
+parser.add_argument('--detinit',help='Start from a almost deterministic point',choices=ut.getInitWays(),default="rnd")
 parser.add_argument("--nz",type=int,default=3,help="representation dimension")
 parser.add_argument('--record',action="store_true",default=False,help='Record the value decrease')
 parser.add_argument('--dataset',type=str,help="dataset to run",default="syn")
@@ -62,7 +62,7 @@ for beta in d_beta_range:
 			beta,args.nz,conv_cnt/args.nrun,args.sinit,args.detinit,len(infocurve_details),))
 
 result_array = np.array(result_array)
-
+'''
 savename = "pf_{dataset:}_{method:}_r{relax:.3f}_c{penalty:}_si{sinit:4.2e}_det{detinit:}_nz{nz:}".format(**argdict)
 repeat_cnt = 0
 safe_save_file = "{:}".format(savename)
@@ -74,3 +74,4 @@ with open("{:}.npy".format(safe_save_file),'wb') as fid:
 	np.save(fid,result_array)
 with open("{:}.pkl".format(safe_save_file),'wb') as fid:
 	pickle.dump(infocurve_details,fid)
+'''

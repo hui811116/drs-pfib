@@ -63,7 +63,7 @@ for beta in d_beta_range:
 		beta,args.nz,conv_cnt/args.nrun,args.sinit,args.detinit,len(ibcurve_details)))
 # numpy results
 result_array  =np.array(result_array)
-
+'''
 savename = 'ib_{dataset:}_{method:}_r{relax:.3f}_c{penalty:}_si{sinit:4.2e}_det{detinit:}_nz{nz:}'.format(**argdict)
 repeat_cnt = 0
 safe_save_file = "{:}".format(savename)
@@ -75,3 +75,4 @@ with open("{:}.npy".format(safe_save_file),"wb") as fid:
 	np.save(fid,result_array)
 with open("{:}.pkl".format(safe_save_file),'wb') as fid:
 	pickle.dump(ibcurve_details,fid)
+'''

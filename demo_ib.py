@@ -18,21 +18,22 @@ d_base = os.getcwd()
 
 parser = argparse.ArgumentParser()
 parser.add_argument('method',choices=alg.supportedIBAlg())
-parser.add_argument('--ntime',type=int,help='run how many times per beta',default=20)
-parser.add_argument('--penalty',type=float,help='penalty coefficient',default=4.0)
+parser.add_argument('--ntime',type=int,help='run how many times per beta',default=16)
+parser.add_argument('--penalty',type=float,help='penalty coefficient',default=8.0)
 parser.add_argument('--relax',type=float,help='Relaxation parameter for DRS',default=1.00)
 parser.add_argument('--thres',type=float,help='convergence threshold',default=1e-6)
 parser.add_argument('--sinit',type=float,help='initial step size',default=1e-2)
 parser.add_argument('--sscale',type=float,help='Scaling of step size',default=0.25)
-parser.add_argument('--maxiter',type=int,help='Maximum number of iterations',default=20000)
+parser.add_argument('--maxiter',type=int,help='Maximum number of iterations',default=5000)
 parser.add_argument('--seed',type=int,help='Random seed for reproduction',default=None)
 parser.add_argument('--minbeta',type=float,help='the minimum beta',default=2.0)
 parser.add_argument('--maxbeta',type=float,help='the maximum beta',default=10.0)
-parser.add_argument('--numbeta',type=int,help='beta geometric space',default=20)
+parser.add_argument('--numbeta',type=int,help='beta geometric space',default=16)
 #parser.add_argument('--detinit',help='Start from a almost deterministic point',action='count',default=0)
 parser.add_argument('--record',action="store_true",default=False,help='Record the value decrease')
 parser.add_argument('--dataset',type=str,help="dataset to run",default="syn")
 parser.add_argument('--save_dir',type=str,default=None,help="output folder")
+parser.add_argument('--init',choices=ut.getInitWays(),default="both")
 
 args = parser.parse_args()
 argdict = vars(args)
@@ -55,8 +56,9 @@ result_array = np.zeros((args.numbeta * args.ntime*2*(nz+1),7))  # beta, niter, 
 res_cnt = 0
 #nz = data['nx']
 sinit = copy.copy(argdict['sinit'])
+init_scheme_range = ut.getInitRange(args.init)
 for run_nz in range(2,nz+2):  # should be upto |X|+1, by theorectic cardinality bound
-	for randscheme in range(2):
+	for randscheme in init_scheme_range:
 		argdict['detinit'] = randscheme
 		argdict['sinit'] = sinit
 		for beta in d_beta_range:
@@ -81,10 +83,7 @@ for run_nz in range(2,nz+2):  # should be upto |X|+1, by theorectic cardinality 
 						details_dict[izx_str]['nz'] = nz
 						details_dict[izx_str]['nrun'] = nn
 			status_tex = 'beta,{:.2f},nz,{:},conv_rate,{:.4f},sinit,{:.4f},detinit,{:},ibc_item,{:}'.format(beta,run_nz,conv_cnt/args.ntime,argdict['sinit'],argdict['detinit'],len(details_dict))
-			#print('\r{:<200}'.format(status_tex),end='\r',flush=True)
 			print('{:}'.format(status_tex))
-			#argdict['sinit'] *= 0.9
-	#print(' '*200+'\r',end='',flush=True)
 
 
 dataout = []

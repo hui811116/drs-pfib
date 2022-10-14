@@ -1,99 +1,79 @@
 import numpy as np
-import sys
 import os
-import matplotlib.pyplot as plt
-import scipy
+import sys
 import time
 import pickle
-import pprint
 import argparse
-from scipy.io import savemat
 import algorithm as alg
 import dataset as dt
 import utils as ut
 import copy
 
-
-d_base = os.getcwd()
-
 parser = argparse.ArgumentParser()
-#parser.add_argument("opt",type=str,choices=['ib','pf'],help="The objective to optimize")
-parser.add_argument("-beta",type=float,help='the PF beta',default=5.0)
-parser.add_argument('-ntime',type=int,help='run how many times per beta',default=200)
-#parser.add_argument('-penalty',type=float,help='penalty coefficient',default=1024.0)
-parser.add_argument('-relax',type=float,help='Relaxation parameter for DRS',default=1.0)
-parser.add_argument('-thres',type=float,help='convergence threshold',default=1e-6)
-parser.add_argument('-sinit',type=float,help='initial step size',default=1e-3)
-parser.add_argument('-sscale',type=float,help='Scaling of step size',default=0.25)
-parser.add_argument('-maxiter',type=int,help='Maximum number of iterations',default=40000)
-parser.add_argument('-seed',type=int,help='Random seed for reproduction',default=None)
-#parser.add_argument('-detinit',help='Start from a almost deterministic point',action='count',default=1)
-parser.add_argument('-minpenalty',type=float,help='the minimum beta',default=1.0)
-parser.add_argument('-maxpenalty',type=float,help='the maximum beta',default=10.0)
-parser.add_argument('-numpenalty',type=int,help='beta geometric space',default=16)
-
-
-
-
+parser.add_argument("method",choices=alg.supportedPfAlg())
+#parser.add_argument("--penalty",type=float,help="penalty coefficient",default=4.0)
+parser.add_argument('--relax',type=float,help='Relaxation parameter for DRS',default=1.00)
+parser.add_argument('--convthres',type=float,help='convergence threshold',default=1e-6)
+parser.add_argument('--sinit',type=float,help='initial step size',default=1e-2)
+parser.add_argument('--sscale',type=float,help='Scaling of step size',default=0.25)
+parser.add_argument("--nrun",type=int,help="number of iteration for a fixed beta",default=10)
+parser.add_argument('--maxiter',type=int,help='Maximum number of iterations',default=1000)
+parser.add_argument('--seed',type=int,help='Random seed for reproduction',default=None)
+parser.add_argument('--beta',type=float,help="The fixed trade-off parameter",default=5.0)
+parser.add_argument('--minc',type=float,help='the minimum penalty coefficient',default=10)
+parser.add_argument('--maxc',type=float,help='the maximum penalty coefficient',default=1e5)
+parser.add_argument('--numc',type=int,help='geometric space for the penalty coefficient',default=200)
+parser.add_argument('--detinit',help='Start from a almost deterministic point',choices=ut.getInitWays(),default="rnd")
+parser.add_argument("--nz",type=int,default=3,help="representation dimension")
+parser.add_argument('--record',action="store_true",default=False,help='Record the value decrease')
+parser.add_argument('--dataset',type=str,help="dataset to run",default="syn")
 
 args = parser.parse_args()
 argdict = vars(args)
+print(argdict)
 
-d_penalty_range = np.geomspace(args.minpenalty,args.maxpenalty,num=args.numpenalty)
-#data = dt.synMy()
-#data = dt.uciHeart()
-data = dt.uciHeartFail()
+#d_beta_range = np.geomspace(args.minbeta,args.maxbeta,num=args.numbeta)
+d_c_range = np.geomspace(args.minc,args.maxc,num=args.numc)
+data = dt.getDataset(args.dataset)
+
 px = np.sum(data['pxy'],axis=1)
-print('dataset: IXY={:>10.5f}, HX={:>10.5f}'.format(ut.calcMI(data['pxy']),-np.sum(px*np.log(px))) )
 
-def runAlg(nz,beta,thres,maxiter,**kwargs):
-	if kwargs['opt'] == "pf":
-		algout = alg.drsPF(data['pxy'],nz,beta,thres,maxiter,**kwargs)
-	elif kwargs['opt'] == "ib":
-		algout = alg.drsIBType1(data['pxy'],nz,beta,thres,maxiter,**kwargs)
-	return algout
+algrun = alg.getPFAlgorithm(args.method)
+infocurve_details = {}
+result_array = [] # beta, niter, conv, izx, izy, entz, inittype
 
-result_dict= {}
-res_mat = np.zeros((len(d_penalty_range),4))
-nz = data['nx']
-sinit = copy.copy(argdict['sinit'])
-argdict['sinit'] = sinit
-argdict['opt'] = 'pf'
-argdict['detinit'] =0
-argdict['record'] =0
-
-for idx, penalty in enumerate(d_penalty_range):
+for penalty_c in d_c_range:
 	conv_cnt = 0
-	argdict['penalty'] = penalty
-	beta = args.beta
-	for nn in range(args.ntime):
-		print('\rProgress: beta={:.2f}, run={:>5}/{:>5}, nz={:>3}, ss_init={:8.2e},penalty={:8.4f}'.format(beta,nn,args.ntime,nz,argdict['sinit'],penalty),end='',flush=True)
-		output = runAlg(nz,**argdict)
-		#print('{nidx:<3} run: nz={nz:>3}, IZX={IZX:>10.4f}, IZY={IZY:>10.4f}, niter={niter:>10}, converge:{conv:>5}'.format(**{'nidx':nn,'nz':nz,**output}),flush=True)
+	for nn in range(args.nrun):
+		runtime_dict = {"penalty":penalty_c,"detinit":args.detinit,"sinit":args.sinit,
+						"sscale":args.sscale,"record":args.record,"relax":args.relax,"seed":args.seed}
+		output = algrun(**{"pxy":data['pxy'],'nz':args.nz,"beta":args.beta,
+							"convthres":args.convthres,"maxiter":args.maxiter,**runtime_dict})
+		entz = ut.calcEnt(output['pzcx']@px)
+		result_array.append([args.beta,output['niter'],int(output['conv']),output['IZX'],output['IZY'],entz,args.detinit])
 		conv_cnt += int(output['conv'])
 		if output['conv']:
-			izx_str = '{:.1f}'.format(output['IZX'])
-			if not result_dict.get(izx_str,False):
-				result_dict[izx_str] = 9999
-			if result_dict[izx_str] >output['IZY']:
-				result_dict[izx_str] = output['IZY']
-	status_tex = 'beta:{:.2f} complete. conv_rate:{:8.4f}, sinit:{:8.4f}, penalty:{:8.4f}'.format(beta,conv_cnt/args.ntime,argdict['sinit'],penalty)
-	print('\r{:<200}'.format(status_tex),end='\r',flush=True)
-	res_mat[idx,:] = [penalty,conv_cnt,args.ntime,conv_cnt/args.ntime]
+			izx_str = "{:.2f}".format(output['IZX'])
+			if not izx_str in infocurve_details.keys():
+				infocurve_details[izx_str] = {"IZY":np.Inf}
+			if infocurve_details[izx_str]['IZY'] > output['IZY']:
+				infocurve_details[izx_str] = {"IZY":output['IZY'],
+					"penalty":penalty_c,"sinit":args.sinit,"nz":args.nz,"beta":args.beta,
+					"detinit":args.detinit,"niter":output['niter']}
+	print('penc,{:.5f},beta,{:.4f},nz,{:},conv_rate,{:.6f},sinit,{:.5e},detinit,{:},pfc_items,{:}'.format(
+			penalty_c,args.beta,args.nz,conv_cnt/args.nrun,args.sinit,args.detinit,len(infocurve_details),))
 
-print(' '*200+'\r',end='',flush=True)
-
-dataout = []
-for k,v in result_dict.items():
-	izx_num = float(k)
-	dataout.append([izx_num,v])
-datanpy = np.array(dataout)
-
-
-# save mat
-savemat_name = 'heartfail_penalty_drspv_r_{}_c_{}_si_{:4.2e}'.format(args.relax,int(args.penalty),sinit)
-#savemat_name = 'heart_drspv_r_{}_c_{}_si_{:4.2e}'.format(args.relax,int(args.penalty),sinit)
-outmat_name = savemat_name.replace('.',"") + '.mat'
-save_location = os.path.join(d_base,outmat_name)
-savemat(save_location,{'relax':args.relax,'penalty':args.penalty,'sinit':args.sinit,'infoplane':datanpy,'penalty_conv':res_mat})
-print('simulation complete, saving results to: {}'.format(save_location))
+result_array = np.array(result_array)
+'''
+savename = "pf_{dataset:}_{method:}_r{relax:.3f}_c{penalty:}_si{sinit:4.2e}_det{detinit:}_nz{nz:}".format(**argdict)
+repeat_cnt = 0
+safe_save_file = "{:}".format(savename)
+while os.path.isfile(safe_save_file+".npy"):
+	repeat_cnt += 1
+	safe_save_file = "{:}_{:}".format(savename,repeat_cnt)
+print("saving results as:{:}".format(safe_save_file))
+with open("{:}.npy".format(safe_save_file),'wb') as fid:
+	np.save(fid,result_array)
+with open("{:}.pkl".format(safe_save_file),'wb') as fid:
+	pickle.dump(infocurve_details,fid)
+'''
