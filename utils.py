@@ -46,6 +46,8 @@ def initPzcx(use_deterministic=0,smooth_val=1e-4,nz=None,nx=None,seed=None):
 			pzcx+= smooth_val
 		elif nz-nx==1:
 			tmp_pxx = np.eye(nx)
+			rng_cols = rs.permutation(nx)
+			tmp_pxx = tmp_pxx[:,rng_cols]
 			rng_last = rs.permutation(nx)
 			last_row = (rng_last==np.arange(nx)).astype("float32")
 			pzcx = np.concatenate((tmp_pxx,last_row[None,:]),axis=0)
@@ -62,3 +64,15 @@ def priorInfo(pxy):
 	pxcy = pxy / py[None,:]
 	pycx = (pxy / px[:,None]).T
 	return (px,py,pxcy,pycx)
+
+
+def loadPzcx(load_idx,dataset):
+	if load_idx ==1 and dataset=="syn":
+		pzcx = np.array([[0.15066163,0.39238144,0.13311934],
+			[0.43622446,0.16604971,0.78102816],
+			[0.41311392,0.44156885,0.08585249]])
+		
+		return pzcx /np.sum(pzcx,axis=0,keepdims=True)
+	else:
+		sys.exit("loading pzcx error, unknown type {:}".format(load_idx))
+

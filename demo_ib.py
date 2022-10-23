@@ -26,10 +26,9 @@ parser.add_argument('--sinit',type=float,help='initial step size',default=1e-2)
 parser.add_argument('--sscale',type=float,help='Scaling of step size',default=0.25)
 parser.add_argument('--maxiter',type=int,help='Maximum number of iterations',default=5000)
 parser.add_argument('--seed',type=int,help='Random seed for reproduction',default=None)
-parser.add_argument('--minbeta',type=float,help='the minimum beta',default=2.0)
+parser.add_argument('--minbeta',type=float,help='the minimum beta',default=1.0)
 parser.add_argument('--maxbeta',type=float,help='the maximum beta',default=10.0)
 parser.add_argument('--numbeta',type=int,help='beta geometric space',default=16)
-#parser.add_argument('--detinit',help='Start from a almost deterministic point',action='count',default=0)
 parser.add_argument('--record',action="store_true",default=False,help='Record the value decrease')
 parser.add_argument('--dataset',type=str,help="dataset to run",default="syn")
 parser.add_argument('--save_dir',type=str,default=None,help="output folder")
@@ -52,9 +51,8 @@ result_dict= {}
 details_dict = {}
 # result_array
 nz = data['nx'] # accounts for theoretic cardinality bound
-result_array = np.zeros((args.numbeta * args.ntime*2*(nz+1),7))  # beta, niter, conv, izx, izy, entz, inittype
+result_array = np.zeros((args.numbeta * args.ntime*2*(nz),8))  # beta, niter, conv, izx, izy, entz, inittype, nz
 res_cnt = 0
-#nz = data['nx']
 sinit = copy.copy(argdict['sinit'])
 init_scheme_range = ut.getInitRange(args.init)
 for run_nz in range(2,nz+2):  # should be upto |X|+1, by theorectic cardinality bound
@@ -64,11 +62,10 @@ for run_nz in range(2,nz+2):  # should be upto |X|+1, by theorectic cardinality 
 		for beta in d_beta_range:
 			conv_cnt = 0
 			for nn in range(args.ntime):
-				#print('\rProgress: beta={:.2f}, run={:>5}/{:>5}, nz={:>3}, ss_init={:8.2e}, detinit={:>3}'.format(beta,nn,args.ntime,nz,argdict['sinit'],argdict['detinit']),end='',flush=True)
 				runtime_dict = {"convthres":args.thres,**argdict}
 				output = algrun(**{"pxy":data["pxy"],"nz":run_nz,"beta":beta,**runtime_dict})
 				entz = ut.calcEnt(output['pzcx']@px)
-				result_array[res_cnt,:] = np.array([beta,output['niter'],int(output['conv']),output["IZX"],output["IZY"],entz,randscheme])
+				result_array[res_cnt,:] = np.array([beta,output['niter'],int(output['conv']),output["IZX"],output["IZY"],entz,randscheme,run_nz])
 				res_cnt += 1
 				conv_cnt += int(output['conv'])
 				if output['conv']:
@@ -97,26 +94,26 @@ mixy = ut.calcMI(data['pxy'])
 # saving the results
 tnow = datetime.datetime.now()
 if not args.save_dir:
-	savebase = "ib_{:}_{:}_results_{:04}{:02}{:02}".format(args.dataset,args.method,tnow.year,tnow.month,tnow.day)
+	savebase = "ib_{:}_{:}_results_{:}".format(args.dataset,args.method,tnow.strftime("%Y%m%d"))
 else:
 	savebase = args.save_dir
 d_save_dir = os.path.join(d_base,savebase)
 os.makedirs(d_save_dir,exist_ok=True)
 # save mat
-savemat_name = 'ib_{:}_{:}_r{:}_c{:}_si{:4.2e}'.format(args.dataset,args.method,args.relax,int(args.penalty),sinit)
+savemat_name = 'ib_{method:}_{dataset:}_r{relax:.3f}_c{penalty:.2f}_si{sinit:4.2e}'.format(**argdict)
 outmat_name = savemat_name.replace('.',"")
 repeat_cnt = 0
 save_location = os.path.join(d_save_dir,outmat_name+'.mat')
 while os.path.isfile(save_location):
 	repeat_cnt+=1
-	savemat_name = 'ib_{:}_{:}_r{:}_c{:}_si{:4.2e}_{:}'.format(args.dataset,args.method,args.relax,int(args.penalty),sinit,repeat_cnt)
+	savemat_name = 'ib_{method:}_{dataset:}_r{relax:.3f}_c{penalty:.2f}_si{sinit:4.2e}_{repeat_cnt:}'.format(**{**argdict,"repeat_cnt":repeat_cnt})
 	outmat_name = savemat_name.replace('.',"")
 	save_location = os.path.join(d_save_dir,outmat_name+'.mat')
-savemat(save_location,{'relax':args.relax,'penalty':args.penalty,'sinit':args.sinit,'infoplane':datanpy,})
+savemat(save_location,{'relax':args.relax,'penalty':args.penalty,'sinit':args.sinit,'infoplane':datanpy,'results_array':result_array})
 
 print('simulation complete, saving figure results to: {:}'.format(save_location))
 # save details
-details_savepath = os.path.join(d_save_dir,outmat_name+".pkl")
+details_savepath = os.path.join(d_save_dir,outmat_name+".npy")
 with open(details_savepath,"wb") as fid:
 	np.save(fid,result_array)
 print("details saved to {:}".format(details_savepath))
@@ -127,7 +124,4 @@ plt.hlines(mixy,0,np.amax(datanpy[:,0]),linestyle=":")
 plt.plot([0,mixy],[0,mixy],linestyle="-.")
 plt.xlabel(r"$I(Z;X)$")
 plt.ylabel(r"$I(Z;Y)$")
-#plt.show()
 plt.savefig(os.path.join(d_save_dir,outmat_name+".png"))
-
-#print(details_dict)

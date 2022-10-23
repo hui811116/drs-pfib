@@ -7,6 +7,8 @@ def getDataset(name):
 		return synMy()
 	elif name == "heartfail":
 		return uciHeartFail()
+	elif name == "nonunifsyn":
+		return synNonUnifX()
 	else:
 		sys.exit("undefined dataset {:}".format(name))
 

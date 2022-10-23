@@ -5,7 +5,7 @@ import utils as ut
 import copy
 
 def supportedIBAlg():
-	return ['admm1','admm2','logadmm1','logadmm2','admm1ms','admm2ms','ba']
+	return ['admm1','admm2','logadmm1','logadmm2','admm1ms','admm2ms','ba','admmdec','admmdecms']
 def getIBAlgorithm(method):
 	if method == "admm1":
 		return drsIBType1
@@ -21,11 +21,15 @@ def getIBAlgorithm(method):
 		return drsIBType2MeanSub
 	elif method == 'ba':
 		return ibOrig
+	elif method == "admmdec":
+		return admmIBDec
+	elif method == "admmdecms":
+		return admmIBDecMs
 	else:
 		sys.exit("undefined method {:}".format(method))
 
 def supportedPfAlg():
-	return ['admm','logadmm','ba','admmms']
+	return ['admm','logadmm','ba','admmms','admmenc']
 
 def getPFAlgorithm(method):
 	if method == "admm":
@@ -34,6 +38,8 @@ def getPFAlgorithm(method):
 		return pfLogSpace
 	elif method == "admmms":
 		return drsPFMeanSub
+	elif method == "admmenc":
+		return admmPFEnc
 	elif method == "ba":
 		return ibOrig
 	else:
@@ -48,8 +54,11 @@ def drsPF(pxy,nz,beta,convthres,maxiter,**kwargs):
 	record_flag = kwargs['record']
 	(nx,ny) = pxy.shape
 	(px,py,pxcy,pycx) = ut.priorInfo(pxy)
-
-	pzcx = ut.initPzcx(det_init,1e-3,nz,nx,kwargs['seed'])
+	if 'load' in kwargs.keys():
+		pzcx = kwargs['load']
+	else:
+		pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	#pzcx = ut.initPzcx(det_init,1e-3,nz,nx,kwargs['seed'])
 	# NOTE: nz<= nx always
 	##
 	pzcy = pzcx @ pxcy
@@ -192,8 +201,11 @@ def drsPFMeanSub(pxy,nz,beta,convthres,maxiter,**kwargs):
 	fobj_pzcx = gd.pfPzcxFuncObj(px,pxcy,beta,penalty)
 	gobj_pzcy = gd.pfPzcyGradObj(py,pxcy,beta,penalty)
 	gobj_pzcx = gd.pfPzcxGradObj(px,pxcy,beta,penalty)
-
-	pzcx = ut.initPzcx(det_init,1e-4,nz,nx,kwargs['seed'])
+	if 'load' in kwargs.keys():
+		pzcx = kwargs['load']
+	else:
+		pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	#pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
 	# call the function value objects
 	# NOTE: nz<= nx always
 	pzcy = pzcx @ pxcy
@@ -218,7 +230,7 @@ def drsPFMeanSub(pxy,nz,beta,convthres,maxiter,**kwargs):
 		# projection on negative-log space
 		# note that the error is still defined on the euclidean space
 		grad_y = gobj_pzcy(pzcy,pzcx,dual_y)
-		mean_grad_y = grad_y - np.mean(grad_y*mask_y,axis=0)
+		mean_grad_y = grad_y*mask_y - np.mean(grad_y*mask_y,axis=0)
 		ss_y = gd.validStepSize(pzcy,-mean_grad_y*mask_y,ss_init,ss_scale)
 		if ss_y ==0:
 			# there are two cases: 1) some element reaches 1, 2) some elements lower than zero
@@ -237,12 +249,13 @@ def drsPFMeanSub(pxy,nz,beta,convthres,maxiter,**kwargs):
 		arm_y = gd.armijoStepSize(pzcy,-mean_grad_y*mask_y,ss_y,ss_scale,1e-4,fobj_pzcy,gobj_pzcy,**{"pzcx":pzcx,"dual_y":dual_y})
 		if arm_y ==0:
 			arm_y = ss_y
+		#arm_y = ss_y
 		raw_pzcy = pzcy - arm_y * mean_grad_y *mask_y + 1e-9
 		new_pzcy = raw_pzcy / np.sum(raw_pzcy,axis=0,keepdims=True)
 		err_y = new_pzcy - est_pzcy
 		dual_drs_y = dual_y -(1-alpha)*penalty*err_y
 		
-		grad_x = gobj_pzcx(pzcx,pzcy,dual_drs_y)
+		grad_x = gobj_pzcx(pzcx,new_pzcy,dual_drs_y)
 		mean_grad_x = grad_x*mask_x - np.mean(grad_x*mask_x,axis=0)
 		ss_x = gd.validStepSize(pzcx,-mean_grad_x*mask_x,ss_init,ss_scale)
 		if ss_x == 0:
@@ -261,6 +274,7 @@ def drsPFMeanSub(pxy,nz,beta,convthres,maxiter,**kwargs):
 		arm_x = gd.armijoStepSize(pzcx,-mean_grad_x*mask_x,ss_x,ss_scale,1e-4,fobj_pzcx,gobj_pzcx,**{"pzcy":new_pzcy,"dual_y":dual_drs_y})
 		if arm_x ==0:
 			arm_x = ss_x
+		#arm_x = ss_x
 		raw_pzcx = pzcx - arm_x * mean_grad_x * mask_x + 1e-9
 		new_pzcx = raw_pzcx / np.sum(raw_pzcx,axis=0,keepdims=True)
 		err_y = new_pzcy - new_pzcx @ pxcy
@@ -288,7 +302,11 @@ def pfLogSpace(pxy,nz,beta,convthres,maxiter,**kwargs):
 	record_flag = kwargs['record']
 	(nx,ny) = pxy.shape
 	(px,py,pxcy,pycx) = ut.priorInfo(pxy)
-	pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	#pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	if 'load' in kwargs.keys():
+		pzcx = kwargs['load']
+	else:
+		pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
 	# call the function value objects
 	# NOTE: nz<= nx always
 	pz = np.sum(pzcx*px[None,:],axis=1)
@@ -316,8 +334,8 @@ def pfLogSpace(pxy,nz,beta,convthres,maxiter,**kwargs):
 												  +np.sum(exp_mlog_pzcx*px[None,:]*mlog_pzcx) + np.sum(dual_y*err_y) + 0.5 * penalty * np.linalg.norm(err_y)**2
 		itcnt +=1
 		# grad_y
-		#grad_y = -beta* exp_mlog_pzcy*(1-mlog_pzcy)*py[None,:] + dual_y+ penalty * err_y
-		grad_y = -exp_mlog_pzcy*(1-mlog_pzcy)*py[None,:] + dual_y+ penalty * err_y
+		grad_y = -beta* exp_mlog_pzcy*(1-mlog_pzcy)*py[None,:] + dual_y+ penalty * err_y
+		#grad_y = -exp_mlog_pzcy*(1-mlog_pzcy)*py[None,:] + dual_y+ penalty * err_y
 		raw_mlog_pzcy = mlog_pzcy - ss_fixed * grad_y
 		raw_mlog_pzcy -= np.amin(raw_mlog_pzcy,axis=0)
 		exp_mlog_pzcy = np.exp(-raw_mlog_pzcy) + 1e-7 # smoothing
@@ -327,10 +345,10 @@ def pfLogSpace(pxy,nz,beta,convthres,maxiter,**kwargs):
 		err_y = new_mlog_pzcy - est_mlog_pzcy
 		dual_drs_y= dual_y -(1.0-alpha)* penalty*err_y
 
-		#grad_x = (exp_mlog_pzcx *px[None,:]) * (-mlog_pzcx +(beta-1)*(np.log(tmp_pz)+1)[:,None]+1)\
-		#		 - exp_mlog_pzcx * (((dual_drs_y + penalty * err_y)/est_pzcy)@pxcy.T)
-		grad_x = (exp_mlog_pzcx *px[None,:]) * ((-1/beta)*mlog_pzcx +(1-1/beta)*(np.log(tmp_pz)+1)[:,None]+1/beta)\
+		grad_x = (exp_mlog_pzcx *px[None,:]) * (-mlog_pzcx +(beta-1)*(np.log(tmp_pz)+1)[:,None]+1)\
 				 - exp_mlog_pzcx * (((dual_drs_y + penalty * err_y)/est_pzcy)@pxcy.T)
+		#grad_x = (exp_mlog_pzcx *px[None,:]) * ((-1/beta)*mlog_pzcx +(1-1/beta)*(np.log(tmp_pz)+1)[:,None]+1/beta)\
+		#		 - exp_mlog_pzcx * (((dual_drs_y + penalty * err_y)/est_pzcy)@pxcy.T)
 		raw_mlog_pzcx = mlog_pzcx - ss_fixed * grad_x
 		raw_mlog_pzcx -= np.amin(raw_mlog_pzcx,axis=0)
 		exp_mlog_pzcx = np.exp(-raw_mlog_pzcx) + 1e-7
@@ -358,6 +376,182 @@ def pfLogSpace(pxy,nz,beta,convthres,maxiter,**kwargs):
 		output_dict["record"] = record_mat[:itcnt]
 	return output_dict
 
+'''
+def admmPFEnc(pxy,nz,beta,convthres,maxiter,**kwargs):
+	penalty = kwargs['penalty']
+	alpha = kwargs['relax']
+	ss_fixed = kwargs['sinit']
+	det_init = kwargs['detinit']
+	record_flag = kwargs['record']
+	(nx,ny) = pxy.shape
+	(px,py,pxcy,pycx) = ut.priorInfo(pxy)
+
+	expand_pycx = np.repeat(np.expand_dims(pycx,axis=1),repeats=nz,axis=1)
+
+	pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	# call the function value objects
+	# NOTE: nz<= nx always
+	pz = np.sum(pzcx*px[None,:],axis=1)
+	#pzcy = pzcx @ pxcy
+	dual_z = np.zeros(pz.shape)
+	itcnt = 0
+	record_mat = np.zeros((1,))
+	if record_flag:
+		record_mat = np.zeros((maxiter,))
+	conv_flag = False
+	while itcnt < maxiter:
+		est_pzcy = pzcx @ pxcy
+		est_pz = np.sum(pzcx * px[None,:],axis=1)
+		est_pycz = (est_pzcy/est_pz[:,None]).T
+		expand_pycz = np.repeat(np.expand_dims(est_pycz,axis=2),repeats=nx,axis=2)
+		err_z = pz - est_pz
+		record_mat[itcnt%record_mat.shape[0]] = beta*np.sum(est_pzcy*py[None,:]*np.log(est_pzcy/est_pz[:,None]))\
+												-np.sum(-pz*np.log(pz))+np.sum(-pzcx*px[None,:]*np.log(pzcx))\
+												+np.sum(dual_z*err_z)+ 0.5 * penalty*(np.linalg.norm(err_z)**2)
+
+		itcnt+=1
+		# convex
+		raw_pz = np.exp(-dual_z - penalty*err_z)
+		new_pz = raw_pz / np.sum(raw_pz,axis=0)
+
+		# dual update
+		err_z = new_pz - est_pz
+		dual_z += penalty * err_z
+
+		# encoder update
+		kl_ker = np.sum(expand_pycx*np.log(expand_pycx/expand_pycz),axis=0)
+		raw_pzcx = np.exp(-beta*kl_ker + np.repeat((dual_z + penalty*err_z)[:,None],repeats=nx,axis=1))
+		new_pzcx = raw_pzcx/ np.sum(raw_pzcx,axis=0,keepdims=True)
+
+		# error
+		est_pz = np.sum(new_pzcx*px[None,:],axis=1)
+		err_z= new_pz - est_pz
+
+		conv_z = 0.5*np.sum(np.fabs(err_z))
+		if np.all(conv_z < convthres):
+			conv_flag=True
+			break
+		else:
+			pz = new_pz
+			pzcx = new_pzcx
+	pzcy = pzcx @ pxcy
+	mizx = ut.calcMI(pzcx*px[None,:])
+	mizy = ut.calcMI(pzcy*py[None,:])
+	output_dict = {"niter":itcnt,"conv":conv_flag,"IZX":mizx,"IZY":mizy,'pzcx':pzcx}
+	if record_flag:
+		output_dict['record'] = record_mat
+	return output_dict
+'''
+
+def admmPFEnc(pxy,nz,beta,convthres,maxiter,**kwargs):
+	penalty = kwargs['penalty']
+	alpha = kwargs['relax']
+	ss_init = kwargs['sinit']
+	ss_scale = kwargs['sscale']
+	det_init = kwargs['detinit']
+	record_flag = kwargs['record']
+	(nx,ny) = pxy.shape
+	(px,py,pxcy,pycx) = ut.priorInfo(pxy)
+
+	fobj_pzcx = gd.pfVarPzcxFuncObj(px,pxcy,py,beta,penalty)
+	fobj_pz = gd.pfVarPzFuncObj(px,beta,penalty)
+	gobj_pzcx = gd.pfVarPzcxGradObj(px,pxcy,py,beta,penalty)
+	gobj_pz = gd.pfVarPzGradObj(px,beta,penalty)
+	entx = np.sum(-px*np.log(px))
+	#pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	if 'load' in kwargs.keys():
+		pzcx = kwargs['load']
+	else:
+		pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	# call the function value objects
+	# NOTE: nz<= nx always
+	pz = np.sum(pzcx*px[None,:],axis=1)
+	dual_z = np.zeros(pz.shape)
+	# masks
+	mask_z = np.ones(pz.shape)
+	mask_x = np.ones(pzcx.shape)
+	itcnt = 0
+	record_mat = np.zeros((1,))
+	if record_flag:
+		record_mat = np.zeros((maxiter,))
+	conv_flag = False
+	while itcnt < maxiter:
+		est_pz = np.sum(pzcx*px[None,:],axis=1)
+		est_pzcy = pzcx@pxcy
+		qxcz = ((pzcx*px[None,:])/est_pz[:,None]).T
+		err_z = est_pz - pz
+		record_mat[itcnt%record_mat.shape[0]] = (beta)*np.sum(-pz * np.log(pz))  -beta *np.sum(-est_pzcy*py[None,:]*np.log(est_pzcy))\
+									-entx + np.sum(-pzcx*px[None,:]*np.log(qxcz).T)\
+									+ np.sum(dual_z * err_z) + 0.5 * penalty * (np.linalg.norm(err_z)**2)
+		itcnt+=1
+		
+		#grad_x = beta*(np.log(est_pzcy)+1)@pxy.T - (np.log(qxcz)*px[:,None]).T + np.repeat((dual_z+penalty*err_z)[:,None],repeats=nx,axis=1)*px[None,:]
+		grad_x = gobj_pzcx(pzcx,pz,dual_z,qxcz)
+		mean_grad_x = grad_x*mask_x - np.mean(grad_x*mask_x,axis=0)
+		ss_x = gd.validStepSize(pzcx,-mean_grad_x*mask_x,ss_init,ss_scale)
+		if ss_x == 0:
+			if np.any(pzcx - mean_grad_x*mask_x*1e-9<=0):
+				gmask_x = pzcx>=1e-7
+				mask_x = np.logical_and(mask_x,gmask_x)
+				mean_grad_x = grad_x*mask_x - np.mean(grad_x*mask_x,axis=0)
+				ss_x = gd.validStepSize(pzcx,-mean_grad_x*mask_x,ss_init,ss_scale)
+			elif np.any(pzcx - mean_grad_x*mask_x*1e-9>=1.0):
+				bad_cols = np.any(pzcx - mean_grad_x*mask_x*1e-9,axis=0)
+				mask_x[:,bad_cols] = 0
+				mean_grad_x = grad_x*mask_x - np.mean(grad_x*mask_x,axis=0)
+				ss_x = gd.validStepSize(pzcx,-mean_grad_x*mask_x,ss_init,ss_scale)
+			else:
+				break
+		# FIXME: armijo
+		arm_x = gd.armijoStepSize(pzcx,-mean_grad_x*mask_x,ss_x,ss_scale,1e-4,fobj_pzcx,gobj_pzcx,**{"pz":pz,"dual_z":dual_z,"qxcz":qxcz})
+		if arm_x ==0:
+			arm_x = ss_x
+		new_pzcx = pzcx - mean_grad_x * arm_x * mask_x + 1e-9
+		new_pzcx /=np.sum(new_pzcx,axis=0,keepdims=True)
+
+		est_pz = np.sum(new_pzcx*px[None,:],axis=1)
+		est_pzcy = new_pzcx @ pxcy
+		err_z = est_pz - pz
+
+		# dual 
+		dual_z += penalty*err_z
+
+		# grad_z
+		#grad_z = -beta*(np.log(pz)+1)-(dual_z + err_z*penalty)
+		grad_z = gobj_pz(pz,new_pzcx,dual_z)
+		mean_grad_z = grad_z*mask_z - np.mean(grad_z * mask_z)
+		ss_z = gd.validStepSize(pz,-mean_grad_z*mask_z,ss_init,ss_scale)
+		if ss_z ==0:
+			if np.any(pz-mean_grad_z*1e-9<=0):
+				gmask_z =pz>=1e-7
+				mask_z = np.logical_and(gmask_z,mask_z)
+				mean_grad_z =grad_z*mask_z - np.mean(grad_z*mask_z)
+				ss_z = gd.validStepSize(pz,-mean_grad_z*mask_z,ss_init,ss_scale)
+			elif np.any(pz-mean_grad_z*1e-9>=1.0):
+				mask_z = np.zeros(pz.shape)
+				mean_grad_z = np.zeros(pz.shape)
+				ss_z = 0.0
+			else:
+				break
+		arm_z = gd.armijoStepSize(pz,-mean_grad_z*mask_z,ss_z,ss_scale,1e-4,fobj_pz,gobj_pz,**{"pzcx":new_pzcx,"dual_z":dual_z})
+		new_pz = pz - mean_grad_z * ss_z * mask_z + 1e-9
+		new_pz/=np.sum(new_pz)
+		err_z = est_pz - new_pz
+		conv_z = 0.5* np.sum(np.fabs(err_z)) 
+		if np.all(conv_z<convthres):
+			conv_flag=True
+			break
+		else:
+			pzcx = new_pzcx
+			pz = new_pz
+	pzcy = pzcx @ pxcy
+	mizx = ut.calcMI(pzcx*px[None,:])
+	mizy = ut.calcMI(pzcy*py[None,:])
+	output_dict = {"niter":itcnt,"conv":conv_flag,"IZX":mizx,"IZY":mizy,'pzcx':pzcx}
+	if record_flag:
+		output_dict['record'] = record_mat
+	return output_dict
+
 def drsIBType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 	penalty = kwargs['penalty']
 	alpha = kwargs['relax']
@@ -375,8 +569,10 @@ def drsIBType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 	# gradient objects
 	gobj_pz = gd.ibType1PzGradObj(px,gamma,penalty)
 	gobj_pzcx = gd.ibType1PzcxGradObj(px,pxcy,py,pycx,gamma,penalty)
-
-	pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	if 'load' in kwargs.keys():
+		pzcx = kwargs['load']
+	else:
+		pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
 	pz = np.sum(pzcx*px[None,:],axis=1)
 
 	dual_z = np.zeros((nz))
@@ -457,8 +653,11 @@ def drsIBType1MeanSub(pxy,nz,beta,convthres,maxiter,**kwargs):
 	# gradient objects
 	gobj_pz = gd.ibType1PzGradObj(px,gamma,penalty)
 	gobj_pzcx = gd.ibType1PzcxGradObj(px,pxcy,py,pycx,gamma,penalty)
-
-	pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	if 'load' in kwargs.keys():
+		pzcx = kwargs['load']
+	else:
+		pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	#pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
 	pz = np.sum(pzcx*px[None,:],axis=1)
 
 	dual_z = np.zeros((nz))
@@ -479,7 +678,7 @@ def drsIBType1MeanSub(pxy,nz,beta,convthres,maxiter,**kwargs):
 												 +np.sum(-est_pzcy*py[None,:]*np.log(est_pzcy)) + np.sum(dual_z *err_z) + 0.5 * penalty*np.linalg.norm(err_z)
 		itcnt +=1
 		# 
-		drs_dual_z = dual_z + penalty * err_z
+		drs_dual_z = dual_z -(1-alpha)* penalty * err_z
 		grad_z = gobj_pz(pz,pzcx,drs_dual_z)
 		mean_grad_z = grad_z*mask_z - np.mean(grad_z*mask_z)
 		ss_z = gd.validStepSize(pz,-mean_grad_z*mask_z,ss_init,ss_scale)
@@ -554,13 +753,17 @@ def drsIBType2(pxy,nz,beta,convthres,maxiter,**kwargs):
 	# function and gradient objects
 	fobj_pzcx = gd.ibType2PzcxFuncObj(px,pxcy,gamma,penalty)
 	fobj_pz   = gd.ibType2PzFuncObj(px,gamma,penalty)
-	fobj_pzcy = gd.ibType2PzcyFuncObj(py,pxcy,penalty)
+	fobj_pzcy = gd.ibType2PzcyFuncObj(py,pxcy,gamma,penalty)
 
 	gobj_pzcx  = gd.ibType2PzcxGradObj(px,pxcy,gamma,penalty)
 	gobj_pz    = gd.ibType2PzGradObj(px,gamma,penalty)
-	gobj_pzcy  = gd.ibType2PzcyGradObj(py,pxcy,penalty)
+	gobj_pzcy  = gd.ibType2PzcyGradObj(py,pxcy,gamma,penalty)
 
-	pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	#pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	if 'load' in kwargs.keys():
+		pzcx = kwargs['load']
+	else:
+		pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
 	pz = np.sum(pzcx*px[None,:],axis=1)
 	pzcy = pzcx @ pxcy
 
@@ -583,7 +786,7 @@ def drsIBType2(pxy,nz,beta,convthres,maxiter,**kwargs):
 		itcnt+=1
 		# loss = -gamma H(Z|X) + <dual_z,err_z> + <dual_zy, err_zy> + ....
 		grad_x = gobj_pzcx(pzcx,pz,pzcy,dual_z,dual_zy)
-		mean_gx = grad_x - np.mean(grad_x,0)
+		mean_gx = grad_x - np.mean(grad_x,axis=0)
 		ss_x = gd.validStepSize(pzcx,-mean_gx,ss_init,ss_scale)
 		if ss_x ==0:
 			break
@@ -601,7 +804,7 @@ def drsIBType2(pxy,nz,beta,convthres,maxiter,**kwargs):
 		grad_z = gobj_pz(pz,new_pzcx,relax_z)
 		mean_gz = grad_z - np.mean(grad_z)
 		grad_y =gobj_pzcy(pzcy,new_pzcx,relax_zy)
-		mean_gy = grad_y - np.mean(grad_y,0)
+		mean_gy = grad_y - np.mean(grad_y,axis=0)
 		# joint stepsize selection
 		ss_z = gd.validStepSize(pz,-mean_gz,ss_init,ss_scale)
 		if ss_z ==0:
@@ -654,13 +857,16 @@ def drsIBType2MeanSub(pxy,nz,beta,convthres,maxiter,**kwargs):
 	# function and gradient objects
 	fobj_pzcx = gd.ibType2PzcxFuncObj(px,pxcy,gamma,penalty)
 	fobj_pz   = gd.ibType2PzFuncObj(px,gamma,penalty)
-	fobj_pzcy = gd.ibType2PzcyFuncObj(py,pxcy,penalty)
+	fobj_pzcy = gd.ibType2PzcyFuncObj(py,pxcy,gamma,penalty)
 
 	gobj_pzcx  = gd.ibType2PzcxGradObj(px,pxcy,gamma,penalty)
 	gobj_pz    = gd.ibType2PzGradObj(px,gamma,penalty)
-	gobj_pzcy  = gd.ibType2PzcyGradObj(py,pxcy,penalty)
-
-	pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	gobj_pzcy  = gd.ibType2PzcyGradObj(py,pxcy,gamma,penalty)
+	if 'load' in kwargs.keys():
+		pzcx = kwargs['load']
+	else:
+		pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	#pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
 	pz = np.sum(pzcx*px[None,:],axis=1)
 	pzcy = pzcx @ pxcy
 
@@ -705,7 +911,7 @@ def drsIBType2MeanSub(pxy,nz,beta,convthres,maxiter,**kwargs):
 		if arm_x ==0:
 			arm_x = ss_x
 		raw_pzcx = pzcx - mean_grad_x*mask_x*arm_x + 1e-9
-		new_pzcx = raw_pzcx /np.sum(raw_pzcx,axis=0)
+		new_pzcx = raw_pzcx /np.sum(raw_pzcx,axis=0,keepdims=True)
 		
 		est_pz =np.sum(new_pzcx * px[None,:],axis=1) 
 		est_pzcy = new_pzcx@pxcy
@@ -714,7 +920,7 @@ def drsIBType2MeanSub(pxy,nz,beta,convthres,maxiter,**kwargs):
 		drs_dual_z = dual_z -(1-alpha)*penalty*err_z
 		drs_dual_zy= dual_zy -(1-alpha)*penalty*err_zy
 
-		grad_z = gobj_pz(pz,pzcx,drs_dual_z)
+		grad_z = gobj_pz(pz,new_pzcx,drs_dual_z)
 		mean_grad_z = grad_z*mask_z - np.mean(grad_z*mask_z)
 		# for step size of z as well # this is a convex function, use valid suffices
 		ss_z = gd.validStepSize(pz,-mean_grad_z*mask_z,ss_init,ss_scale)
@@ -730,7 +936,7 @@ def drsIBType2MeanSub(pxy,nz,beta,convthres,maxiter,**kwargs):
 				ss_z = gd.validStepSize(pz,-mean_grad_z*mask_z,ss_init,ss_scale)
 			else:
 				break
-		grad_y = gobj_pzcy(pzcy,pzcx,drs_dual_zy)
+		grad_y = gobj_pzcy(pzcy,new_pzcx,drs_dual_zy)
 		mean_grad_y = grad_y*mask_y - np.mean(grad_y*mask_y,axis=0)
 		ss_y = gd.validStepSize(pzcy,-mean_grad_y*mask_y,ss_z,ss_scale)
 		if ss_y ==0:
@@ -785,7 +991,11 @@ def admmIBLogSpaceType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 	(nx,ny) = pxy.shape
 	(px,py,pxcy,pycx) = ut.priorInfo(pxy)
 
-	pzcx = ut.initPzcx(det_init,1e-7,nz,nx,kwargs['seed'])
+	#pzcx = ut.initPzcx(det_init,1e-7,nz,nx,kwargs['seed'])
+	if 'load' in kwargs.keys():
+		pzcx = kwargs['load']
+	else:
+		pzcx = ut.initPzcx(det_init,1e-6,nz,nx,kwargs['seed'])
 	pz = np.sum(pzcx*px[None,:],axis=1)
 	# log variables
 	mlog_pz = -np.log(pz)
@@ -859,7 +1069,11 @@ def admmIBLogSpaceType2(pxy,nz,beta,convthres,maxiter,**kwargs):
 	record_flag = kwargs['record']
 	(nx,ny) = pxy.shape
 	(px,py,pxcy,pycx) = ut.priorInfo(pxy)
-	pzcx = ut.initPzcx(det_init,1e-7,nz,nx,kwargs['seed'])
+	#pzcx = ut.initPzcx(det_init,1e-7,nz,nx,kwargs['seed'])
+	if 'load' in kwargs.keys():
+		pzcx = kwargs['load']
+	else:
+		pzcx = ut.initPzcx(det_init,1e-6,nz,nx,kwargs['seed'])
 	pz = np.sum(pzcx*px[None,:],axis=1)
 	pzcy = pzcx @ pxcy
 
@@ -965,7 +1179,11 @@ def ibOrig(pxy,nz,beta,convthres,maxiter,**kwargs):
 	record_flag = kwargs['record']
 	(nx,ny) = pxy.shape
 	(px,py,pxcy,pycx) = ut.priorInfo(pxy)
-	pzcx = ut.initPzcx(det_init,1e-7,nz,nx,kwargs['seed'])
+	#pzcx = ut.initPzcx(det_init,1e-7,nz,nx,kwargs['seed'])
+	if 'load' in kwargs.keys():
+		pzcx = kwargs['load']
+	else:
+		pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
 	pz = np.sum(pzcx*px[None,:],axis=1)
 	pzcy = pzcx @ pxcy
 	pycz = ((pzcy * py[None,:])/pz[:,None]).T
@@ -1005,4 +1223,272 @@ def ibOrig(pxy,nz,beta,convthres,maxiter,**kwargs):
 	output_dict = {'pzcx':pzcx,'niter':itcnt,'IZX':mizx,'IZY':mizy,'conv':conv_flag}
 	if record_flag:
 		output_dict['record'] = record_mat[:itcnt]
+	return output_dict
+'''
+def admmIBLogFpx(pxy,nz,beta,convthres,maxiter,**kwargs):
+	penalty = kwargs['penalty']
+	alpha = kwargs['relax']
+	assert alpha == 1.0
+	det_init = kwargs['detinit']
+	record_flag = kwargs['record']
+	ss_fixed = kwargs['sinit']
+	(nx,ny) = pxy.shape
+	(px,py,pxcy,pycx) = ut.priorInfo(pxy)
+
+	expand_pycx = np.repeat(np.expand_dims(pycx,axis=1),repeats=nz,axis=1) #(y,z,x)
+	pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	pz = np.sum(pzcx*px[None,:],axis=1)
+	pzcy = pzcx @ pxcy
+	qycz = ((pzcy*py[None,:])/pz[:,None]).T
+
+	mlog_pzcx = -np.log(pzcx)
+	mlog_qycz = -np.log(qycz)
+	dual_ycz = np.zeros(mlog_qycz.shape)
+	itcnt =0 
+	conv_flag = False
+	record_mat = np.zeros((1,))
+	if record_flag:
+		record_mat = np.zeros((maxiter,))
+	while itcnt < maxiter:
+		# variational bound
+		exp_mlog_pzcx = np.exp(-mlog_pzcx)
+		exp_mlog_qycz = np.exp(-mlog_qycz)
+		est_pz = np.sum(exp_mlog_pzcx*px[None,:],axis=1)
+		est_mlog_pz = -np.log(est_pz)
+		est_pzy = exp_mlog_pzcx@pxy
+		est_pycz = (est_pzy/est_pz[:,None]).T
+		est_mlog_pycz= (-np.log(est_pzy)+np.log(est_pz)[:,None]).T
+		expand_mlog_qycz = np.repeat(mlog_qycz[...,None],repeats=nx,axis=2) #(y,z,x)
+		err_ycz = est_mlog_pycz - mlog_qycz
+		record_mat[itcnt%record_mat.shape[0]] = np.sum(-est_pz*np.log(est_pz)) -np.sum(-exp_mlog_pzcx*px[None,:]*mlog_pzcx)\
+												+ beta*np.sum(-(est_pzy.T)*mlog_qycz)\
+												+ np.sum(dual_ycz*err_ycz) + 0.5 * penalty*(np.linalg.norm(err_ycz)**2)
+		itcnt+=1
+		# using fixed point method
+		kl_ker = np.sum(expand_pycx*(np.log(expand_pycx)+ expand_mlog_qycz ),axis=0) # (z,x)
+		expand_est_pycz = np.repeat(np.expand_dims(est_pycz,axis=2),repeats=nx,axis=2) # (y,z,x)
+		expand_penalty = (expand_pycx/expand_est_pycz)-1
+		expand_err_ycz = np.repeat(np.expand_dims(dual_ycz+penalty* err_ycz,axis=2),repeats=nx,axis=2)
+
+		penalty_expo_x = np.sum(expand_err_ycz*expand_penalty,axis=0)/(est_pz[:,None])
+		grad_x = (exp_mlog_pzcx*px[None,:]) * (np.repeat(-est_mlog_pz[:,None],repeats=nx,axis=1) + mlog_pzcx - beta* kl_ker + penalty_expo_x)
+		raw_mlog_pzcx = mlog_pzcx - ss_fixed* grad_x
+		raw_mlog_pzcx -= np.amin(raw_mlog_pzcx,axis=0)
+		new_pzcx = np.exp(-raw_mlog_pzcx) + 1e-9
+		# BA
+		#new_pzcx = np.repeat(est_pz[:,None],repeats=nx,axis=1) * np.exp(-beta*kl_ker)
+		new_pzcx /= np.sum(new_pzcx,axis=0,keepdims=True)
+		new_mlog_pzcx = -np.log(new_pzcx)
+		pzy = new_pzcx @ pxy
+		pz = new_pzcx @ px
+		new_qycz = (pzy/pz[:,None]).T
+		# dual update
+		est_pz = np.sum(new_pzcx*px[None,:],axis=1)
+		est_pzy = new_pzcx @ pxy
+		est_pycz = (est_pzy/est_pz[:,None]).T
+		est_mlog_pycz = -np.log(est_pycz)
+		err_ycz = est_mlog_pycz - mlog_qycz
+		dual_ycz =  dual_ycz + penalty * err_ycz
+
+		# update variational decoder
+		# BA
+		#penalty_expo_y = (1/penalty)*(dual_ycz - beta*(est_pzy.T) )
+		#new_qycz = est_pycz * np.exp(-penalty_expo_y) + 1e-9
+		new_qycz = est_pycz
+		#grad_y= beta*est_pzy.T- dual_ycz - penalty * err_ycz
+		#raw_mlog_qycz = mlog_qycz - ss_fixed*grad_y
+		#raw_mlog_qycz -= np.amin(raw_mlog_qycz,axis=0)
+		#new_qycz = np.exp(-raw_mlog_qycz)+1e-9
+		new_qycz /= np.sum(new_qycz,axis=0,keepdims=True)
+		new_mlog_qycz = -np.log(new_qycz)
+		# err
+		#err_ycz = est_mlog_pycz - new_mlog_qycz
+		#conv_ycz = 0.5 * np.sum(np.fabs(err_ycz),axis=0)
+		diff= 0.5*np.sum(np.fabs(exp_mlog_pzcx-new_pzcx),axis=0)
+		if np.all(diff<convthres):
+			conv_flag=True
+			break
+		else:
+			mlog_pzcx = new_mlog_pzcx
+			mlog_qycz = new_mlog_qycz
+	pzcx = np.exp(-mlog_pzcx)
+	pzcx /= np.sum(pzcx,axis=0,keepdims=True)
+	pzy = pzcx@pxy
+	mizx = ut.calcMI(pzcx*px[None,:])
+	mizy = ut.calcMI(pzy)
+	output_dict = {'niter':itcnt,"conv":conv_flag,'IZX':mizx,'IZY':mizy,'pzcx':pzcx}
+	if record_flag:
+		output_dict['record'] = record_mat
+	return output_dict
+'''
+
+def admmIBDec(pxy,nz,beta,convthres,maxiter,**kwargs):
+	penalty = kwargs['penalty']
+	alpha = kwargs['relax'] # no support for relaxation
+	assert alpha == 1.0
+	#gamma = 1/ beta
+	# use beta
+	#ss_init = kwargs['sinit']
+	#ss_scale = kwargs['sscale']
+	#ss_fixed = kwargs['sinit']
+	det_init = kwargs['detinit']
+	record_flag = kwargs['record']
+	(nx,ny) = pxy.shape
+	(px,py,pxcy,pycx) = ut.priorInfo(pxy)
+
+	expand_pycx = np.repeat(np.expand_dims(pycx,axis=1),repeats=nz,axis=1) #(y,z,x)
+	#pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	if 'load' in kwargs.keys():
+		pzcx = kwargs['load']
+	else:
+		pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	pz = np.sum(pzcx*px[None,:],axis=1)
+	#pzcy = pzcx @ pxcy
+	qycz = ((pzcx@pxy)/pz[:,None]).T
+	dual_z= np.zeros(pz.shape)
+	itcnt =0 
+	conv_flag = False
+	record_mat = np.zeros((1,))
+	if record_flag:
+		record_mat = np.zeros((maxiter,))
+	while itcnt < maxiter:
+		est_pz = np.sum(pzcx*px[None,:],axis=1)
+		#err_z = np.sum(est_pz*np.log(est_pz/pz))
+		err_z = est_pz - pz
+		est_pzy = pzcx@pxy
+		record_mat[itcnt%record_mat.shape[0]] = np.sum(-pz*np.log(pz))-np.sum(-pzcx*px[None,:]*np.log(pzcx))+beta* np.sum(-est_pzy.T*np.log(qycz))
+		itcnt +=1
+
+		# fixed point
+		expand_qycz = np.repeat(np.expand_dims(qycz,axis=-1),repeats=nx,axis=-1)
+		kl_ker = np.sum(expand_pycx*np.log(expand_pycx/expand_qycz),axis=0)
+		new_pzcx= np.exp(-beta*kl_ker-np.repeat((dual_z+penalty*err_z)[:,None],repeats=nx,axis=1))
+		new_pzcx /=np.sum(new_pzcx,axis=0,keepdims=True)
+		# dual_z
+		est_pz = np.sum(new_pzcx*px[None,:],axis=1)
+		#err_z = np.sum(est_pz*np.log(est_pz/pz))
+		err_z = est_pz - pz
+		dual_z += penalty*err_z
+		# pz update
+		new_pz = np.exp(-dual_z)
+		new_pz /= np.sum(new_pz)
+
+		# convergence test
+		err_z = est_pz - new_pz
+		conv_z = 0.5*np.sum(np.fabs(err_z))
+		if np.all(conv_z<convthres):
+			conv_flag=True
+			break
+		else:
+			pz = new_pz
+			pzcx = new_pzcx
+			qycz = ((new_pzcx@pxy)/est_pz[:,None]).T
+	pz = pzcx@px
+	pzy = pzcx@pxy
+	mizx = ut.calcMI(pzcx*px[None,:])
+	mizy = ut.calcMI(pzy)
+	output_dict = {"niter":itcnt,"conv":conv_flag,"pzcx":pzcx,"IZX":mizx,"IZY":mizy}
+	if record_flag:
+		output_dict['record'] = record_mat
+	return output_dict
+
+
+def admmIBDecMs(pxy,nz,beta,convthres,maxiter,**kwargs):
+	penalty = kwargs['penalty']
+	alpha = kwargs['relax'] # no support for relaxation
+	assert alpha == 1.0
+	gamma = 1/ beta
+	# use beta
+	ss_init = kwargs['sinit']
+	ss_scale = kwargs['sscale']
+	det_init = kwargs['detinit']
+	record_flag = kwargs['record']
+	(nx,ny) = pxy.shape
+	(px,py,pxcy,pycx) = ut.priorInfo(pxy)
+
+	expand_pycx = np.repeat(np.expand_dims(pycx,axis=1),repeats=nz,axis=1) #(y,z,x)
+	#pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	if 'load' in kwargs.keys():
+		pzcx = kwargs['load']
+	else:
+		pzcx = ut.initPzcx(det_init,1e-5,nz,nx,kwargs['seed'])
+	pz = np.sum(pzcx*px[None,:],axis=1)
+	#pzcy = pzcx @ pxcy
+	qycz = ((pzcx@pxy)/pz[:,None]).T
+	dual_z= np.zeros(pz.shape)
+	mask_x = np.ones(pzcx.shape)
+	mask_z = np.ones(pz.shape)
+	itcnt =0 
+	conv_flag = False
+	record_mat = np.zeros((1,))
+	if record_flag:
+		record_mat = np.zeros((maxiter,))
+	while itcnt< maxiter:
+		est_pz = np.sum(pzcx*px[None,:],axis=1)
+		est_pzy = pzcx@pxy
+		err_z = est_pz- pz
+
+		record_mat[itcnt%record_mat.shape[0]] = gamma * np.sum(-pz*np.log(pz)) -gamma *np.sum(-pzcx*px[None,:]*np.log(pzcx))\
+												-np.sum(-py*np.log(py)) + np.sum(-est_pzy.T*np.log(qycz))\
+												+ np.sum(dual_z*err_z) + 0.5*penalty*np.linalg.norm(err_z)**2
+
+		itcnt+=1 
+		expand_qycz = np.repeat(qycz[...,None],repeats=nx,axis=2)
+		grad_x = gamma*(np.log(pzcx)+1)*px[None,:] - np.sum(expand_pycx*np.log(expand_qycz),axis=0)*px[None,:]\
+				+ np.repeat((dual_z+penalty*err_z)[:,None],repeats=nx,axis=1)
+		mean_grad_x = grad_x*mask_x - np.mean(grad_x*mask_x,axis=0,keepdims=True)
+
+		ss_x = gd.validStepSize(pzcx,-mean_grad_x*mask_x,ss_init,ss_scale)
+		if ss_x == 0:
+			if np.any(pzcx- mean_grad_x*mask_x * 1e-9 <=0):
+				gmask_x = pzcx > 1e-8
+				mask_x = np.logical_and(gmask_x, mask_x)
+				mean_grad_x = grad_x * mask_x - np.mean(grad_x*mask_x,axis=0)
+				ss_x = gd.validStepSize(pzcx,-mean_grad_x*mask_x,ss_init,ss_scale)
+			elif np.any(pzcx-mean_grad_x*mask_x*1e-9>=1.0):
+				bad_cols= np.any(pzcx- mean_grad_x*mask_x * 1e-9>=0,axis=0)
+				mask_x[:,bad_cols] =0
+				mean_grad_x = grad_x*mask_x - np.mean(grad_x*mask_x,axis=0)
+				ss_x = gd.validStepSize(pzcx,-mean_grad_x*mask_x,ss_init,ss_scale)
+			else:
+				break
+		new_pzcx = pzcx - ss_x * mean_grad_x * mask_x +1e-9
+		new_pzcx = new_pzcx/np.sum(new_pzcx,axis=0,keepdims=True)
+
+		est_pz = np.sum(new_pzcx*px[None,:],axis=1)
+		err_z = est_pz - pz
+		dual_z += penalty*err_z 
+
+		grad_z = -gamma*(np.log(pz)+1) - (dual_z+penalty*err_z)
+		mean_grad_z = grad_z *mask_z - np.mean(grad_z*mask_z)
+		ss_z = gd.validStepSize(pz,-mean_grad_z*mask_z,ss_init,ss_scale)
+		if ss_z ==0:
+			if np.any(pz-mean_grad_z*mask_z *1e-9<=0):
+				gmask_z = pz>1e-8
+				mask_z = np.logical_and(gmask_z,mask_z)
+				mean_grad_z = grad_z * mask_z - np.mean(grad_z * mask_z)
+				ss_z = gd.validStepSize(pz,-mean_grad_z*mask_z,ss_init,ss_scale)
+			elif np.any(pz-mean_grad_z*mask_z*1e-9>=1):
+				mask_z =np.zeros(pz.shape)
+				mean_grad_z = np.zeros(pz.shape)
+				ss_z = ss_init
+			else:
+				break
+		new_pz = pz - mean_grad_z *ss_z * mask_z + 1e-9
+		new_pz = new_pz /np.sum(new_pz)
+
+		err_z = est_pz - new_pz
+		conv_z = 0.5*np.sum(np.fabs(err_z))
+		if conv_z < convthres:
+			conv_flag = True 
+			break
+		else:
+			pz = new_pz
+			pzcx = new_pzcx
+			qycz = ((new_pzcx@pxy)/est_pz[:,None]).T
+	mizx = ut.calcMI(pzcx*px[None,:])
+	mizy = ut.calcMI(pzcx@pxy)
+	output_dict = {"niter":itcnt,"conv":conv_flag,'pzcx':pzcx,'IZX':mizx,"IZY":mizy}
+	if record_flag:
+		output_dict['record'] = record_mat
 	return output_dict
