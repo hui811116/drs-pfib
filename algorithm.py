@@ -337,7 +337,10 @@ def pfLogSpace(pxy,nz,beta,convthres,maxiter,**kwargs):
 		grad_y = -beta* exp_mlog_pzcy*(1-mlog_pzcy)*py[None,:] + dual_y+ penalty * err_y
 		#grad_y = -exp_mlog_pzcy*(1-mlog_pzcy)*py[None,:] + dual_y+ penalty * err_y
 		raw_mlog_pzcy = mlog_pzcy - ss_fixed * grad_y
-		raw_mlog_pzcy -= np.amin(raw_mlog_pzcy,axis=0)
+		grad_mlog_pzcy = np.amin(raw_mlog_pzcy,axis=0)
+		grad_mlog_pzcy = np.where(grad_mlog_pzcy<=0.0,grad_mlog_pzcy,np.zeros((ny,)))
+		#raw_mlog_pzcy -= np.amin(raw_mlog_pzcy,axis=0)
+		raw_mlog_pzcy = raw_mlog_pzcy - grad_mlog_pzcy
 		exp_mlog_pzcy = np.exp(-raw_mlog_pzcy) + 1e-7 # smoothing
 		new_pzcy =exp_mlog_pzcy/np.sum(exp_mlog_pzcy,axis=0,keepdims=True)
 		new_mlog_pzcy = -np.log(new_pzcy)
@@ -350,7 +353,10 @@ def pfLogSpace(pxy,nz,beta,convthres,maxiter,**kwargs):
 		#grad_x = (exp_mlog_pzcx *px[None,:]) * ((-1/beta)*mlog_pzcx +(1-1/beta)*(np.log(tmp_pz)+1)[:,None]+1/beta)\
 		#		 - exp_mlog_pzcx * (((dual_drs_y + penalty * err_y)/est_pzcy)@pxcy.T)
 		raw_mlog_pzcx = mlog_pzcx - ss_fixed * grad_x
-		raw_mlog_pzcx -= np.amin(raw_mlog_pzcx,axis=0)
+		grad_mlog_pzcx = np.amin(raw_mlog_pzcx,axis=0)
+		grad_mlog_pzcx = np.where(grad_mlog_pzcx<=0.0,grad_mlog_pzcx,np.zeros((nx,)))
+		#raw_mlog_pzcx -= np.amin(raw_mlog_pzcx,axis=0)
+		raw_mlog_pzcx = raw_mlog_pzcx - grad_mlog_pzcx
 		exp_mlog_pzcx = np.exp(-raw_mlog_pzcx) + 1e-7
 		new_pzcx = exp_mlog_pzcx/np.sum(exp_mlog_pzcx,axis=0,keepdims=True)
 		new_mlog_pzcx = -np.log(new_pzcx)
