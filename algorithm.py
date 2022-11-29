@@ -340,7 +340,7 @@ def pfLogSpace(pxy,nz,beta,convthres,maxiter,**kwargs):
 		grad_mlog_pzcy = np.amin(raw_mlog_pzcy,axis=0)
 		grad_mlog_pzcy = np.where(grad_mlog_pzcy<=0.0,grad_mlog_pzcy,np.zeros((ny,)))
 		#raw_mlog_pzcy -= np.amin(raw_mlog_pzcy,axis=0)
-		raw_mlog_pzcy = raw_mlog_pzcy - grad_mlog_pzcy
+		raw_mlog_pzcy = raw_mlog_pzcy - grad_mlog_pzcy[None,:]
 		exp_mlog_pzcy = np.exp(-raw_mlog_pzcy) + 1e-7 # smoothing
 		new_pzcy =exp_mlog_pzcy/np.sum(exp_mlog_pzcy,axis=0,keepdims=True)
 		new_mlog_pzcy = -np.log(new_pzcy)
@@ -356,7 +356,7 @@ def pfLogSpace(pxy,nz,beta,convthres,maxiter,**kwargs):
 		grad_mlog_pzcx = np.amin(raw_mlog_pzcx,axis=0)
 		grad_mlog_pzcx = np.where(grad_mlog_pzcx<=0.0,grad_mlog_pzcx,np.zeros((nx,)))
 		#raw_mlog_pzcx -= np.amin(raw_mlog_pzcx,axis=0)
-		raw_mlog_pzcx = raw_mlog_pzcx - grad_mlog_pzcx
+		raw_mlog_pzcx = raw_mlog_pzcx - grad_mlog_pzcx[None,:]
 		exp_mlog_pzcx = np.exp(-raw_mlog_pzcx) + 1e-7
 		new_pzcx = exp_mlog_pzcx/np.sum(exp_mlog_pzcx,axis=0,keepdims=True)
 		new_mlog_pzcx = -np.log(new_pzcx)
@@ -1029,7 +1029,11 @@ def admmIBLogSpaceType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 		grad_z = (gamma-1) * mexp_mlog_pz*(1-mlog_pz) + dual_drs_z + penalty * err_z
 		raw_mlog_pz = mlog_pz - grad_z * ss_fixed
 		# projection
-		raw_mlog_pz -= np.amin(raw_mlog_pz)
+		# negative log space should be non-negative
+		#raw_mlog_pz -= np.amin(raw_mlog_pz)
+		prj_mlog_pz = np.amin(raw_mlog_pz)
+		prj_mlog_pz = np.where(prj_mlog_pz<=0.0,prj_mlog_pz,0.0) # this should have one element only
+		raw_mlog_pz = raw_mlog_pz - prj_mlog_pz
 		mexp_mlog_pz = np.exp(-raw_mlog_pz) + 1e-9 # smoothing
 		new_pz = mexp_mlog_pz/ np.sum(mexp_mlog_pz)
 		new_mlog_pz = -np.log(new_pz)
@@ -1041,7 +1045,10 @@ def admmIBLogSpaceType1(pxy,nz,beta,convthres,maxiter,**kwargs):
 				- (mexp_mlog_pzcx * px[None,:])*np.repeat(((dual_z + penalty * err_z)/est_pz)[:,None],repeats=nx,axis=1)
 		raw_mlog_pzcx = mlog_pzcx - grad_x * ss_fixed
 		# projection
-		raw_mlog_pzcx -= np.amin(raw_mlog_pzcx,axis=0,keepdims=True)
+		#raw_mlog_pzcx -= np.amin(raw_mlog_pzcx,axis=0,keepdims=True)
+		prj_mlog_pzcx = np.amin(raw_mlog_pzcx,axis=0)
+		prj_mlog_pzcx = np.where(prj_mlog_pzcx<=0.0,prj_mlog_pzcx,np.zeros((nx,)))
+		raw_mlog_pzcx = raw_mlog_pzcx - prj_mlog_pzcx[None,:]
 		mexp_mlog_pzcx = np.exp(-raw_mlog_pzcx) + 1e-9
 		new_pzcx = mexp_mlog_pzcx/ np.sum(mexp_mlog_pzcx,axis=0,keepdims=True)
 		new_mlog_pzcx = -np.log(new_pzcx)
@@ -1116,7 +1123,10 @@ def admmIBLogSpaceType2(pxy,nz,beta,convthres,maxiter,**kwargs):
 				+ mexp_mlog_pzcx * ( ((dual_zy + penalty * err_zy)/tmp_pzcy) @ pxcy.T)
 		raw_mlog_pzcx = mlog_pzcx - grad_x * ss_fixed
 		# projection
-		raw_mlog_pzcx -= np.amin(raw_mlog_pzcx,axis=0,keepdims=True)
+		#raw_mlog_pzcx -= np.amin(raw_mlog_pzcx,axis=0,keepdims=True)
+		prj_mlog_pzcx = np.amin(raw_mlog_pzcx,axis=0)
+		prj_mlog_pzcx = np.where(prj_mlog_pzcx<=0.0,prj_mlog_pzcx,np.zeros((nx,)))
+		raw_mlog_pzcx = raw_mlog_pzcx - prj_mlog_pzcx[None,:]
 		mexp_mlog_pzcx = np.exp(-raw_mlog_pzcx) + 1e-9
 		new_pzcx = mexp_mlog_pzcx/np.sum(mexp_mlog_pzcx,axis=0,keepdims=True)
 		# new update
@@ -1137,14 +1147,21 @@ def admmIBLogSpaceType2(pxy,nz,beta,convthres,maxiter,**kwargs):
 		mexp_mlog_pzcy = np.exp(-mlog_pzcy)
 		grad_z = (gamma-1) * mexp_mlog_pz * (1-mlog_pz) - (dual_drs_z + penalty * err_z)
 		raw_mlog_pz = mlog_pz - grad_z * ss_fixed
-		raw_mlog_pz -= np.amin(raw_mlog_pz)
+		#raw_mlog_pz -= np.amin(raw_mlog_pz)
+		prj_mlog_pz = np.amin(raw_mlog_pz)
+		prj_mlog_pz = np.where(prj_mlog_pz<=0.0,prj_mlog_pz,0.0)
+		raw_mlog_pz = raw_mlog_pz - prj_mlog_pz
 		mexp_mlog_pz = np.exp(-raw_mlog_pz)+1e-9
 		new_pz = mexp_mlog_pz/np.sum(mexp_mlog_pz)
 		new_mlog_pz = -np.log(new_pz)
 		# update pzcy
 		grad_y = mexp_mlog_pzcy*(1-mlog_pzcy) * py[None,:] - (dual_drs_zy + penalty * err_zy)
 		raw_mlog_pzcy = mlog_pzcy - grad_y * ss_fixed
-		raw_mlog_pzcy -= np.amin(raw_mlog_pzcy,axis=0,keepdims=True)
+		#raw_mlog_pzcy -= np.amin(raw_mlog_pzcy,axis=0,keepdims=True)
+		prj_mlog_pzcy = np.amin(raw_mlog_pzcy,axis=0)
+		prj_mlog_pzcy = np.where(prj_mlog_pzcy<=0.0,prj_mlog_pzcy,np.zeros((ny,)))
+		raw_mlog_pzcy = raw_mlog_pzcy - prj_mlog_pzcy[None,:]
+
 		mexp_mlog_pzcy = np.exp(-raw_mlog_pzcy)+1e-9
 		new_pzcy = mexp_mlog_pzcy/np.sum(mexp_mlog_pzcy,axis=0,keepdims=True)
 		new_mlog_pzcy = -np.log(new_pzcy)
